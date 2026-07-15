@@ -1,9 +1,3 @@
-#include "LTOS/logger.hpp"
+#include "LTOS/panic.hpp"
 
-extern "C" void divide_error() {
-  logger::error("Divide by zero");
-
-  while (true) {
-    asm volatile("hlt");
-  }
-}
+extern "C" void divide_error() { panic::halt("Divide by zero"); }

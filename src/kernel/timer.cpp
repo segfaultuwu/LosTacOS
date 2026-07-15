@@ -1,31 +1,41 @@
 #include "LTOS/timer.hpp"
 #include "LTOS/drivers/serial.hpp"
-#include "LTOS/lib/kprintf.h"
+#include "LTOS/logger.hpp"
 
 namespace timer {
 
-static volatile uint64_t tick_count = 0;
+static volatile uint64_t counter = 0;
+static uint32_t frequency = 100;
 
-void init(uint32_t frequency) {
-  uint32_t divisor = 1193182 / frequency;
+void init(uint32_t freq) {
+  uint32_t divisor = 1193182 / freq;
 
   drivers::serial::outb(0x43, 0x36);
 
   drivers::serial::outb(0x40, divisor & 0xff);
-
   drivers::serial::outb(0x40, (divisor >> 8) & 0xff);
 
-  kprintf("PIT initialized: %d Hz", frequency);
+  logger::info("PIT initialized");
 }
 
-void tick() { tick_count++; }
+uint64_t get_uptime_ms() {
+  // ticks / freq = seconds
+  // *1000 = miliseconds
+  return (counter * 1000) / frequency;
+}
 
-uint64_t ticks() { return tick_count; }
+uint64_t get_uptime_sec() { return counter / frequency; }
+
+void tick() { counter++; }
+
+uint64_t ticks() { return counter; }
 
 void sleep(uint64_t ms) {
-  uint64_t target = tick_count + ms;
+  uint64_t start = counter;
 
-  while (tick_count < target) {
+  uint64_t wait_ticks = (ms * frequency) / 1000;
+
+  while (counter - start < wait_ticks) {
     asm volatile("hlt");
   }
 }

@@ -51,14 +51,11 @@ void init() {
     set_gate(i, 0);
   }
   set_gate(0, (uint64_t)isr0);
+  set_gate(32, (uint64_t)irq0);
 
   idtr.limit = sizeof(idt) - 1;
 
   idtr.base = (uint64_t)&idt;
-
-  for (int i = 0; i < 256; i++) {
-    set_gate(i, 0);
-  }
 
   lidt(&idtr);
 
