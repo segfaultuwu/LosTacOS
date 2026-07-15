@@ -19,9 +19,9 @@ void *memset(void *dest, int value, size_t n) {
   return dest;
 }
 
-void *memmove(void *dest, const void *src, size_t n) {
-  unsigned char *d = dest;
-  const unsigned char *s = src;
+void *memmove(volatile void *dest, const volatile void *src, size_t n) {
+  volatile unsigned char *d = dest;
+  const volatile unsigned char *s = src;
 
   if (d < s) {
     for (size_t i = 0; i < n; i++)
@@ -31,7 +31,7 @@ void *memmove(void *dest, const void *src, size_t n) {
       d[i - 1] = s[i - 1];
   }
 
-  return dest;
+  return (void *)dest;
 }
 
 int memcmp(const void *ptr1, const void *ptr2, size_t n) {

@@ -1,24 +1,23 @@
-#include "LTOS/drivers/keyboard.hpp"
+#include "LTOS/drivers/serial.hpp"
+#include "LTOS/lib/kprintf.h"
 #include "LTOS/panic.hpp"
+#include "LTOS/timer.hpp"
 #include "LTOS/vga.hpp"
 
+extern int shell_main(void);
+
 extern "C" void kernel_main() {
+  drivers::serial::init();
+  drivers::serial::write("Reached kernel_main!\n");
+
+  timer::init(100);
+
   vga::clear();
 
-  vga::write("LosTacOS booted\n");
-  vga::write("Entered x86_64 long mode\n");
-  char c;
-  char *s;
+  kprintf("LosTacOS booted\n");
 
-  vga::write("Enter a character:");
-  c = drivers::keyboard::getchar();
-  vga::put(c);
-  vga::put('\n');
-
-  vga::write("Enter a string:");
-  s = drivers::keyboard::getstring();
-  vga::write(s);
-  vga::put('\n');
-
+  drivers::serial::write("About to run shell..\n");
+  int err = shell_main();
+  kprintf("Shell exited with code %d", err);
   panic::halt("Should not exit the main loop.");
 }

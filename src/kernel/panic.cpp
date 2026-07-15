@@ -3,7 +3,7 @@
 namespace panic {
 
 void halt(const char *msg) {
-  vga::write("\nPANIC: ");
+  vga::write("\n\033[31mPANIC:\033[0m ");
   vga::write(msg);
 
   while (true)
