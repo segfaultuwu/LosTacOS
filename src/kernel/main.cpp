@@ -1,18 +1,24 @@
-extern "C"
-void kernel_main()
-{
-    volatile char* vga = (volatile char*)0xB8000;
+#include "LTOS/drivers/keyboard.hpp"
+#include "LTOS/panic.hpp"
+#include "LTOS/vga.hpp"
 
-    const char* text = "LosTacOS entered long mode";
+extern "C" void kernel_main() {
+  vga::clear();
 
-    for (int i = 0; text[i]; i++)
-    {
-        vga[i * 2] = text[i];
-        vga[i * 2 + 1] = 0x0F;
-    }
+  vga::write("LosTacOS booted\n");
+  vga::write("Entered x86_64 long mode\n");
+  char c;
+  char *s;
 
-    while (true)
-    {
-        asm volatile("hlt");
-    }
+  vga::write("Enter a character:");
+  c = drivers::keyboard::getchar();
+  vga::put(c);
+  vga::put('\n');
+
+  vga::write("Enter a string:");
+  s = drivers::keyboard::getstring();
+  vga::write(s);
+  vga::put('\n');
+
+  panic::halt("Should not exit the main loop.");
 }

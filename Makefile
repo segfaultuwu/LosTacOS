@@ -5,7 +5,7 @@ AS = nasm
 CXXFLAGS = -std=c++23 -ffreestanding -O2 -Wall -Wextra \
            -fno-exceptions -fno-rtti \
            -mno-red-zone -mcmodel=kernel \
-					 -fno-pic
+					 -fno-pic -Iinclude/ -fno-builtin
 
 LDFLAGS = -T linker.ld -nostdlib
 
