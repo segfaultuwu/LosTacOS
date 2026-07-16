@@ -7,7 +7,7 @@
 
 namespace logger {
 
-enum Level { INFO = 1, WARN, ERROR };
+enum Level { INFO = 1, WARN, ERROR, TEST };
 
 // TODO: fix undefined behaviour when printing with format specifiers
 void log(Level level, const char *fmt, va_list args) {
@@ -27,6 +27,8 @@ void log(Level level, const char *fmt, va_list args) {
   case ERROR:
     kprintf("\033[31m[ERROR]\033[0m ");
     break;
+  case TEST:
+    kprintf("\033[34m[TEST]\033[0m ");
   }
 
   va_list copy;
@@ -43,6 +45,15 @@ void info(const char *fmt, ...) {
   va_start(args, fmt);
 
   log(INFO, fmt, args);
+
+  va_end(args);
+}
+
+void test(const char *fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+
+  log(TEST, fmt, args);
 
   va_end(args);
 }

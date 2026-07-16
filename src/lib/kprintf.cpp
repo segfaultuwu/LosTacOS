@@ -34,23 +34,41 @@ void kvprintf(const char *fmt, va_list args) {
 
     fmt++;
 
+    bool long_flag = false;
+
+    if (*fmt == 'l') {
+      long_flag = true;
+      fmt++;
+    }
+
     switch (*fmt) {
+
     case 's': {
       const char *str = va_arg(args, const char *);
 
-      if (!str) {
-        break;
-      }
+      if (!str)
+        str = "(null)";
 
-      while (*str) {
+      while (*str)
         vga::put(*str++);
-      }
 
       break;
     }
 
     case 'd': {
-      int n = va_arg(args, int);
+      if (long_flag) {
+        int64_t n = va_arg(args, int64_t);
+        print_number(n, 10);
+      } else {
+        int n = va_arg(args, int);
+        print_number(n, 10);
+      }
+
+      break;
+    }
+
+    case 'u': {
+      uint64_t n = va_arg(args, uint64_t);
       print_number(n, 10);
       break;
     }
@@ -58,6 +76,11 @@ void kvprintf(const char *fmt, va_list args) {
     case 'x': {
       uint64_t n = va_arg(args, uint64_t);
       print_number(n, 16);
+      break;
+    }
+
+    case '%': {
+      vga::put('%');
       break;
     }
     }

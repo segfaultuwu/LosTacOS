@@ -20,11 +20,19 @@
 #define MULTIBOOT_FRAMEBUFFER_TYPE_EGA_TEXT 2
 
 struct multiboot_mmap_entry {
-  uint32_t size;
   uint64_t addr;
   uint64_t len;
   uint32_t type;
-} __attribute__((packed));
+  uint32_t zero;
+};
+
+struct multiboot_tag_mmap {
+  uint32_t type;
+  uint32_t size;
+
+  uint32_t entry_size;
+  uint32_t entry_version;
+};
 
 typedef struct multiboot_mmap_entry multiboot_memory_map_t;
 

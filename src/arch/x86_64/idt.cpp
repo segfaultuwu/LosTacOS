@@ -1,5 +1,4 @@
 #include "LTOS/arch/x86_64/idt.hpp"
-#include "LTOS/logger.hpp"
 #include <cstdint>
 
 namespace idt {
@@ -58,8 +57,6 @@ void init() {
   idtr.base = (uint64_t)&idt;
 
   lidt(&idtr);
-
-  logger::info("IDT initialized");
 }
 
 } // namespace idt

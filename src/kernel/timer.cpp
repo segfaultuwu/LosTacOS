@@ -1,6 +1,5 @@
 #include "LTOS/timer.hpp"
 #include "LTOS/drivers/serial.hpp"
-#include "LTOS/logger.hpp"
 
 namespace timer {
 
@@ -14,8 +13,6 @@ void init(uint32_t freq) {
 
   drivers::serial::outb(0x40, divisor & 0xff);
   drivers::serial::outb(0x40, (divisor >> 8) & 0xff);
-
-  logger::info("PIT initialized");
 }
 
 uint64_t get_uptime_ms() {

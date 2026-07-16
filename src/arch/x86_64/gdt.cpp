@@ -1,5 +1,4 @@
 #include "LTOS/arch/x86_64/gdt.hpp"
-#include "LTOS/logger.hpp"
 
 namespace gdt {
 
@@ -48,7 +47,6 @@ void init() {
   set_entry(4, 0, 0xFFFFF, 0xF2, 0xA0);
 
   gdt_flush(&gdtp);
-  logger::info("GDT Initialized");
 }
 
 } // namespace gdt

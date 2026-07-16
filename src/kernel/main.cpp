@@ -2,6 +2,7 @@
 #include "LTOS/boot.hpp"
 #include "LTOS/drivers/serial.hpp"
 #include "LTOS/lib/kprintf.h"
+#include "LTOS/logger.hpp"
 #include "LTOS/panic.hpp"
 #include "LTOS_gen/version.h"
 #include "multiboot.h"
@@ -15,9 +16,10 @@ extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
     paging::reserve_below(mbi_addr + mbi_total_size);
   }
 
-  boot::setup();
+  boot::setup(mbi_addr);
 
-  kprintf("magic=%x mbi=%x\n", magic, mbi_addr);
+  // Multiboot debug shit
+  // kprintf("magic=%x mbi=%x\n", magic, mbi_addr);
 
   struct multiboot_module mods[8];
 
@@ -27,7 +29,7 @@ extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
     kprintf("Invalid multiboot2 magic!\n");
   }
 
-  kprintf("LosTacOS v%s booted\n", LTOS_VERSION);
+  logger::info("LosTacOS v%s booted\n", LTOS_VERSION);
   /* Idt testing shit
    *
    * logger::info("Trying to divide by 0..");
@@ -50,6 +52,13 @@ extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
       timer::sleep(1000);
     }
    */
+
+  logger::info("Starting tests..");
+
+  // Heap test
+  int *test1 = new int;
+  *test1 = 2137;
+  logger::test("Heap: test1 = %d", *test1);
 
   drivers::serial::write("About to run shell..\n");
   int err = shell_main(mbi_addr, mods, 8);

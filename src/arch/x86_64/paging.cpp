@@ -1,10 +1,8 @@
 #include "LTOS/arch/x86_64/paging.hpp"
-#include "LTOS/lib/kprintf.h"
+#include "LTOS/kernel.hpp"
 #include "LTOS/logger.hpp"
 
 using page_t = uint64_t;
-
-extern "C" uint8_t kernel_end;
 
 namespace paging {
 
@@ -38,15 +36,15 @@ void init() {
   for (int i = 0; i < 512; i++)
     kernel_pml4[i] = 0;
 
-  next_free = ((uint64_t)&kernel_end + 0xFFF) & ~0xFFF;
+  next_free = ((uint64_t)&_kernel_end + 0xFFF) & ~0xFFF;
 
   uint64_t reserved_aligned = (reserved_end + 0xFFF) & ~0xFFF;
   if (reserved_aligned > next_free)
     next_free = reserved_aligned;
 
-  logger::info("Paging initialized");
-  kprintf("kernel_end=%x\n", (uint64_t)&kernel_end);
-  kprintf("next=%x\n", next_free);
+  // Debug shit
+  // kprintf("_kernel_end=%x\n", (uint64_t)&_kernel_end);
+  // kprintf("next=%x\n", next_free);
 }
 
 void map_page(uint64_t *pml4, uint64_t va, uint64_t pa, uint64_t flags) {
@@ -100,8 +98,6 @@ void setup_kernel_identity() {
 }
 
 void enable_paging() {
-  logger::info("Loading CR3");
-
   uint64_t cr3 = (uint64_t)kernel_pml4;
 
   asm volatile("mov %0, %%cr3" : : "r"(cr3) : "memory");
@@ -123,8 +119,6 @@ void enable_paging() {
   cr0 |= (1ULL << 31);
 
   asm volatile("mov %0,%%cr0" : : "r"(cr0));
-
-  logger::info("Paging enabled");
 }
 
 uint64_t *create_address_space() {

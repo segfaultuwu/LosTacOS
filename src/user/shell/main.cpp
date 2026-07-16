@@ -1,5 +1,6 @@
 #include "LTOS/drivers/keyboard.hpp"
 #include "LTOS/lib/kprintf.h"
+#include "LTOS/mm/pmm.hpp"
 #include "LTOS/vga.hpp"
 #include "multiboot.h"
 #include "string.h"
@@ -40,7 +41,8 @@ const static char *LOS_SHELLOS_HELP_TEXT =
     "LosShellos help:\n"
     "\tfetch       - display info about the OS\n"
     "\texit        - exits the shell\n"
-    "\tlistmodules - lists multiboot modules\n";
+    "\tlistmodules - lists multiboot modules\n"
+    "\tmemory      - prints memory map\n";
 
 int shell_main(uint64_t mbi_phys_addr, struct multiboot_module *mb_out,
                int mb_max_count) {
@@ -56,6 +58,8 @@ int shell_main(uint64_t mbi_phys_addr, struct multiboot_module *mb_out,
       vga::write(LOS_SHELLOS_HELP_TEXT);
     } else if (strcmp(input, "listmodules") == 0) {
       multiboot2::list_modules(mbi_phys_addr, mb_out, mb_max_count);
+    } else if (strcmp(input, "memory") == 0) {
+      pmm::print_memory_map();
     } else if (strcmp(input, "exit") == 0) {
       return 0;
       // TODO: fix bug where empty string still shows unknown command
