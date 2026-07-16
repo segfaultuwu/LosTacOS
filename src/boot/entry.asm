@@ -177,10 +177,17 @@ setup_page_tables:
     mov [pdp_table], eax
 
 
-    ; Identity map first 2MB
-    mov eax, 0x00000083
+    ; Identity map the first 16MB using 2MB huge pages
+    mov ecx, 8                ; 8 * 2MB = 16MB
+    mov eax, 0x00000083       ; present + writable + huge page, base=0
+    mov edi, pd_table
 
-    mov [pd_table], eax
+.map_loop:
+    mov [edi], eax
+    add eax, 0x200000
+    add edi, 8
+    dec ecx
+    jnz .map_loop
 
     ret
 

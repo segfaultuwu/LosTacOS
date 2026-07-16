@@ -6,7 +6,8 @@ CXXFLAGS = -std=c++23 -ffreestanding -O2 -Wall -Wextra \
            -fno-exceptions -fno-rtti \
            -mno-red-zone -mcmodel=kernel \
 					 -fno-pic -Iinclude/ -fno-builtin \
-					 -fno-stack-protector
+					 -fno-stack-protector -mno-sse -mno-sse2 \
+					 -mno-mmx -mno-avx -mgeneral-regs-only
 
 LDFLAGS = -T linker.ld -nostdlib -z max-page-size=0x1000
 
