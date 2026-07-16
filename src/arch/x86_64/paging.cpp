@@ -6,8 +6,6 @@ using page_t = uint64_t;
 
 namespace paging {
 
-alignas(4096) static uint64_t kernel_pml4[512];
-
 static uint64_t next_free;
 static uint64_t reserved_end = 0;
 
@@ -84,10 +82,39 @@ void map_page(uint64_t *pml4, uint64_t va, uint64_t pa, uint64_t flags) {
   pt[pt_i] = (pa & ~0xFFF) | flags;
 }
 
+void unmap_page(uint64_t *pml4, uint64_t va) {
+  uint64_t pml4_i = (va >> 39) & 0x1FF;
+  uint64_t pdpt_i = (va >> 30) & 0x1FF;
+  uint64_t pd_i = (va >> 21) & 0x1FF;
+  uint64_t pt_i = (va >> 12) & 0x1FF;
+
+  if (!(pml4[pml4_i] & PAGE_PRESENT))
+    return;
+
+  uint64_t *pdpt = (uint64_t *)(pml4[pml4_i] & ~0xFFF);
+
+  if (!(pdpt[pdpt_i] & PAGE_PRESENT))
+    return;
+
+  uint64_t *pd = (uint64_t *)(pdpt[pdpt_i] & ~0xFFF);
+
+  if (!(pd[pd_i] & PAGE_PRESENT))
+    return;
+
+  uint64_t *pt = (uint64_t *)(pd[pd_i] & ~0xFFF);
+
+  if (!(pt[pt_i] & PAGE_PRESENT))
+    return;
+
+  pt[pt_i] = 0;
+
+  asm volatile("invlpg (%0)" : : "r"(va) : "memory");
+}
+
 void setup_kernel_identity() {
   logger::info("Identity mapping");
 
-  for (uint64_t addr = 0; addr < 0x1000000; addr += 0x1000) {
+  for (uint64_t addr = 0; addr < 0x10000000; addr += 0x1000) {
     map_page(kernel_pml4, addr, addr, PAGE_PRESENT | PAGE_WRITABLE);
   }
 

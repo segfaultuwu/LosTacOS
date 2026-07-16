@@ -12,6 +12,8 @@ namespace pmm {
 
 constexpr uint64_t PAGE_SIZE = 4096;
 
+static uint64_t last_page = 0;
+
 // Max 128GB of RAM (who has more in the big 26? :wilted_rose:)
 constexpr uint64_t MAX_MEMORY = 128ULL * 1024 * 1024 * 1024;
 
@@ -86,6 +88,13 @@ void init(uint64_t multiboot_addr) {
 
       for (uint32_t i = 0; i < count; i++) {
 
+        if (region_count < MAX_REGIONS) {
+          regions[region_count].base = entry->addr;
+          regions[region_count].length = entry->len;
+          regions[region_count].type = entry->type;
+          region_count++;
+        }
+
         if (entry->type == MEMORY_AVAILABLE) {
 
           total_pages += entry->len / PAGE_SIZE;
@@ -106,8 +115,8 @@ void init(uint64_t multiboot_addr) {
 }
 
 uintptr_t alloc_page() {
-
-  for (uint64_t i = 0; i < TOTAL_PAGES; i++) {
+  uint64_t i;
+  for (i = last_page; i < TOTAL_PAGES; i++) {
 
     if (!test_bit(i)) {
 
@@ -170,16 +179,16 @@ static const char *type_name(uint32_t type) {
 void print_memory_map() {
   kprintf("Memory Map\n");
 
-  kprintf("--------------------------------------\n");
-
-  kprintf("BASE             LENGTH           TYPE\n");
+  kprintf("+------------------+------------------+------------+\n");
+  kprintf("| %-16s | %-16s | %-10s |\n", "BASE", "LENGTH", "TYPE");
+  kprintf("+------------------+------------------+------------+\n");
 
   for (size_t i = 0; i < region_count; i++) {
-    kprintf("0x%lx     0x%lx     %s\n", regions[i].base, regions[i].length,
+    kprintf("| %016lx | %016lx | %-10s |\n", regions[i].base, regions[i].length,
             type_name(regions[i].type));
   }
 
-  kprintf("--------------------------------------\n");
+  kprintf("+------------------+------------------+------------+\n");
 
   uint64_t used_mb = used_memory() / (1024 * 1024);
   uint64_t total_mb = total_memory() / (1024 * 1024);

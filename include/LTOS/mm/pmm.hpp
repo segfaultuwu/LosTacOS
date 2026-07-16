@@ -11,6 +11,8 @@ struct MemoryRegion {
   uint32_t type;
 };
 
+constexpr size_t MAX_REGIONS = 128;
+
 static MemoryRegion regions[128];
 static size_t region_count = 0;
 

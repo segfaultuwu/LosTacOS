@@ -1,5 +1,6 @@
 #include "LTOS/timer.hpp"
 #include "LTOS/drivers/serial.hpp"
+#include <cstdint>
 
 namespace timer {
 
@@ -15,10 +16,26 @@ void init(uint32_t freq) {
   drivers::serial::outb(0x40, (divisor >> 8) & 0xff);
 }
 
+// ticks / freq = seconds
+
 uint64_t get_uptime_ms() {
-  // ticks / freq = seconds
   // *1000 = miliseconds
   return (counter * 1000) / frequency;
+}
+
+uint64_t get_uptime_min() {
+  // /60 = minutes
+  return (counter / frequency) / 60;
+}
+
+uint64_t get_uptime_h() {
+  // / 60 /60 = hours
+  return (counter / frequency) / 60 / 60;
+}
+
+uint64_t get_uptime_d() {
+  // / 60 /60 /24 = days
+  return (counter / frequency) / 60 / 60 / 24;
 }
 
 uint64_t get_uptime_sec() { return counter / frequency; }

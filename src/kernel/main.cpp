@@ -21,6 +21,7 @@ extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
   // Multiboot debug shit
   // kprintf("magic=%x mbi=%x\n", magic, mbi_addr);
 
+  // module declarations
   struct multiboot_module mods[8];
 
   if (magic == 0x36d76289) {
