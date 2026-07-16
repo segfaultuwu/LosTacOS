@@ -1,36 +1,33 @@
-#include "LTOS/arch/x86_64/gdt.hpp"
-#include "LTOS/arch/x86_64/idt.hpp"
 #include "LTOS/arch/x86_64/paging.hpp"
-#include "LTOS/drivers/pic.hpp"
+#include "LTOS/boot.hpp"
 #include "LTOS/drivers/serial.hpp"
 #include "LTOS/lib/kprintf.h"
-#include "LTOS/logger.hpp"
 #include "LTOS/panic.hpp"
-#include "LTOS/timer.hpp"
-#include "LTOS/user/userspace.hpp"
-#include "LTOS/vga.hpp"
+#include "LTOS_gen/version.h"
+#include "multiboot.h"
 
-extern int shell_main(void);
+extern int shell_main(uint64_t mbi_phys_addr, struct multiboot_module *mb_out,
+                      int mb_max_count);
 
-extern "C" void kernel_main() {
-  drivers::serial::init();
-  drivers::serial::write("Reached kernel_main!\n");
+extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
+  if (magic == 0x36d76289) {
+    uint32_t mbi_total_size = *(uint32_t *)mbi_addr;
+    paging::reserve_below(mbi_addr + mbi_total_size);
+  }
 
-  vga::clear();
+  boot::setup();
 
-  drivers::pic::init();
-  timer::init(100);
+  kprintf("magic=%x mbi=%x\n", magic, mbi_addr);
 
-  gdt::init();
-  idt::init();
+  struct multiboot_module mods[8];
 
-  paging::init();
-  paging::setup_kernel_identity();
-  paging::enable_paging();
+  if (magic == 0x36d76289) {
+    multiboot2::parse_info(mbi_addr);
+  } else {
+    kprintf("Invalid multiboot2 magic!\n");
+  }
 
-  asm volatile("sti");
-
-  logger::info("LosTacOS booted\n");
+  kprintf("LosTacOS v%s booted\n", LTOS_VERSION);
   /* Idt testing shit
    *
    * logger::info("Trying to divide by 0..");
@@ -54,10 +51,8 @@ extern "C" void kernel_main() {
     }
    */
 
-  user::run_user();
-
   drivers::serial::write("About to run shell..\n");
-  int err = shell_main();
+  int err = shell_main(mbi_addr, mods, 8);
   kprintf("Shell exited with code %d", err);
   panic::halt("Should not exit the main loop.");
 }

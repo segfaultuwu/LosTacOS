@@ -4,7 +4,14 @@
 
 extern "C" void divide_error() { panic::halt("Divide by zero"); }
 
-extern "C" void unhandled_interrupt(uint64_t vector) {
-  kprintf("Unhandled interrupt/exception: vector=%d\n", vector);
-  panic::halt("Unhandled interrupt/exception");
+extern "C" void unhandled_interrupt(uint64_t vector, uint64_t addr) {
+  kprintf("vector=%d\n", vector);
+
+  if (vector == 14) {
+    kprintf("\r");
+    kprintf("Page fault address: %x\n", addr);
+    panic::halt("Page fault   ^");
+  }
+
+  panic::halt("^ Unhandled interrupt vector");
 }

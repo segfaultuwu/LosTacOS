@@ -38,8 +38,13 @@ void kvprintf(const char *fmt, va_list args) {
     case 's': {
       const char *str = va_arg(args, const char *);
 
-      while (*str)
+      if (!str) {
+        break;
+      }
+
+      while (*str) {
         vga::put(*str++);
+      }
 
       break;
     }

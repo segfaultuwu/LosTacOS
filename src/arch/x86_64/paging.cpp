@@ -11,13 +11,20 @@ namespace paging {
 alignas(4096) static uint64_t kernel_pml4[512];
 
 static uint64_t next_free;
+static uint64_t reserved_end = 0;
+
+void reserve_below(uint64_t addr) {
+  if (addr > reserved_end)
+    reserved_end = addr;
+}
 
 void *alloc_page() {
   uint64_t addr = next_free;
 
   next_free += 0x1000;
 
-  kprintf("alloc=%x\n", addr);
+  // for debugging
+  // kprintf("alloc=%x\n", addr);
 
   uint64_t *p = (uint64_t *)addr;
 
@@ -32,6 +39,10 @@ void init() {
     kernel_pml4[i] = 0;
 
   next_free = ((uint64_t)&kernel_end + 0xFFF) & ~0xFFF;
+
+  uint64_t reserved_aligned = (reserved_end + 0xFFF) & ~0xFFF;
+  if (reserved_aligned > next_free)
+    next_free = reserved_aligned;
 
   logger::info("Paging initialized");
   kprintf("kernel_end=%x\n", (uint64_t)&kernel_end);

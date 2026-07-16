@@ -5,7 +5,7 @@ AS = nasm
 CXXFLAGS = -std=c++23 -ffreestanding -O2 -Wall -Wextra \
            -fno-exceptions -fno-rtti \
            -mno-red-zone -mcmodel=kernel \
-					 -fno-pic -Iinclude/ -fno-builtin \
+					 -fno-pic -I./include/ -I./build/generated/ -fno-builtin \
 					 -fno-stack-protector -mno-sse -mno-sse2 \
 					 -mno-mmx -mno-avx -mgeneral-regs-only
 
@@ -40,7 +40,7 @@ build:
 %.asm.o: %.asm
 	$(AS) -f elf64 $< -o $@
 
-$(KERNEL): build $(OBJ)
+$(KERNEL): build version $(OBJ)
 	$(LD) $(LDFLAGS) -o $(KERNEL) $(OBJ)
 
 iso: $(KERNEL)
@@ -55,6 +55,9 @@ iso: $(KERNEL)
 	echo '}' >> build/isodir/boot/grub/grub.cfg
 
 	grub-mkrescue -o $(ISO) build/isodir
+
+version:
+	bash ./tools/genver.sh
 
 run: iso
 	qemu-system-x86_64 \

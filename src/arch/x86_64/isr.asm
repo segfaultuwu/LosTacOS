@@ -41,8 +41,19 @@ irq0:
 extern unhandled_interrupt
 
 isr_stub_common:
-    mov rdi, [rsp]
+    cli
+
+    mov rdi, [rsp]      ; vector
+
+    cmp rdi, 14
+    jne .normal
+
+    mov rax, cr2
+    mov rsi, rax        ; drugi argument = fault address
+
+.normal:
     call unhandled_interrupt
+
 .hang:
     hlt
     jmp .hang

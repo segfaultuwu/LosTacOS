@@ -10,6 +10,8 @@ namespace paging {
 void init();
 void enable_paging();
 
+void reserve_below(uint64_t addr);
+
 void setup_kernel_identity();
 
 uint64_t *create_address_space();
