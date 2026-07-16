@@ -2,23 +2,25 @@ ENTRY(_start)
 
 SECTIONS
 {
-    . = 1M;
+  . = 1M;
 
-    .text : {
-        *(.multiboot)
-        *(.text*)
-    }
+  .text : {
+    *(.multiboot)
+    *(.text*)
+  }
 
-    .rodata : {
-        *(.rodata*)
-    }
+  .rodata : {
+      *(.rodata*)
+  }
 
-    .data : {
-        *(.data*)
-    }
+  .data : {
+    *(.data*)
+  }
 
-    .bss : {
-        *(COMMON)
-        *(.bss*)
-    }
+  .bss : ALIGN(4096) {
+    *(COMMON)
+    *(.bss*)
+  }
+
+  kernel_end = .;
 }

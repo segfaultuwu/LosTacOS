@@ -1,10 +1,13 @@
+#include "LTOS/arch/x86_64/gdt.hpp"
 #include "LTOS/arch/x86_64/idt.hpp"
+#include "LTOS/arch/x86_64/paging.hpp"
 #include "LTOS/drivers/pic.hpp"
 #include "LTOS/drivers/serial.hpp"
 #include "LTOS/lib/kprintf.h"
 #include "LTOS/logger.hpp"
 #include "LTOS/panic.hpp"
 #include "LTOS/timer.hpp"
+#include "LTOS/user/userspace.hpp"
 #include "LTOS/vga.hpp"
 
 extern int shell_main(void);
@@ -12,11 +15,20 @@ extern int shell_main(void);
 extern "C" void kernel_main() {
   drivers::serial::init();
   drivers::serial::write("Reached kernel_main!\n");
-  idt::init();
+
+  vga::clear();
+
   drivers::pic::init();
   timer::init(100);
+
+  gdt::init();
+  idt::init();
+
+  paging::init();
+  paging::setup_kernel_identity();
+  paging::enable_paging();
+
   asm volatile("sti");
-  vga::clear();
 
   logger::info("LosTacOS booted\n");
   /* Idt testing shit
@@ -41,6 +53,8 @@ extern "C" void kernel_main() {
       timer::sleep(1000);
     }
    */
+
+  user::run_user();
 
   drivers::serial::write("About to run shell..\n");
   int err = shell_main();

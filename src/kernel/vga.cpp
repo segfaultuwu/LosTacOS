@@ -38,12 +38,27 @@ void home() {
   col = 0;
 }
 
+void scroll() {
+  for (size_t y = 1; y < VGA_HEIGHT; y++) {
+    for (size_t x = 0; x < VGA_WIDTH; x++) {
+      buffer[(y - 1) * VGA_WIDTH + x] = buffer[y * VGA_WIDTH + x];
+    }
+  }
+
+  for (size_t x = 0; x < VGA_WIDTH; x++) {
+    buffer[(VGA_HEIGHT - 1) * VGA_WIDTH + x] = ((uint16_t)color << 8) | ' ';
+  }
+
+  row = VGA_HEIGHT - 1;
+  col = 0;
+}
+
 void newline() {
   col = 0;
   row++;
 
   if (row >= VGA_HEIGHT)
-    row = VGA_HEIGHT - 1;
+    scroll();
 }
 
 void put_raw(char c) {
@@ -82,6 +97,10 @@ void handle_ansi(const char *seq) {
 
   else if (strcmp(seq, "[36m") == 0) {
     set_color(3, 0);
+  }
+
+  else if (strcmp(seq, "[37m") == 0) {
+    set_color(7, 0);
   }
 
   else if (strcmp(seq, "[2J") == 0) {
@@ -128,19 +147,23 @@ void put(char c) {
     newline();
     return;
 
+  case '\r':
+    col = 0;
+    return;
+
   case '\t':
-    put(' ');
-    put(' ');
-    put(' ');
-    put(' ');
+    for (int i = 0; i < 4; i++)
+      put(' ');
+
     return;
 
   case '\b':
-    if (col) {
+    if (col > 0) {
       col--;
 
       buffer[row * VGA_WIDTH + col] = ((uint16_t)color << 8) | ' ';
     }
+
     return;
   }
 
@@ -148,8 +171,9 @@ void put(char c) {
 }
 
 void write(const char *str) {
-  while (*str)
+  while (*str) {
     put(*str++);
+  }
 }
 
 } // namespace vga

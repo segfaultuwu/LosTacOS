@@ -14,9 +14,9 @@ SRC_CPP = $(shell find src -name "*.cpp")
 SRC_C   = $(shell find src -name "*.c")
 SRC_ASM = $(shell find src -name "*.asm")
 
-OBJ_CPP = $(SRC_CPP:.cpp=.o)
-OBJ_ASM = $(SRC_ASM:.asm=.o)
-OBJ_C   = $(SRC_C:.c=.o)
+OBJ_CPP = $(SRC_CPP:.cpp=.cpp.o)
+OBJ_ASM = $(SRC_ASM:.asm=.asm.o)
+OBJ_C   = $(SRC_C:.c=.c.o)
 
 OBJ = $(OBJ_CPP) $(OBJ_C) $(OBJ_ASM)
 
@@ -28,15 +28,15 @@ all: iso
 build:
 	mkdir -p build
 
-%.o: %.cpp
+%.cpp.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-%.o: %.c
+%.c.o: %.c
 	gcc -std=c23 -ffreestanding -O2 -Wall -Wextra \
 	    -fno-builtin -Iinclude/ \
 	    -c $< -o $@
 
-%.o: %.asm
+%.asm.o: %.asm
 	$(AS) -f elf64 $< -o $@
 
 $(KERNEL): build $(OBJ)
