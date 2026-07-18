@@ -16,12 +16,6 @@ extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
     paging::reserve_below(mbi_addr + mbi_total_size);
   }
 
-  boot::setup(mbi_addr);
-
-  // Multiboot debug shit
-  // kprintf("magic=%x mbi=%x\n", magic, mbi_addr);
-
-  // module declarations
   struct multiboot_module mods[8];
 
   if (magic == 0x36d76289) {
@@ -29,6 +23,13 @@ extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
   } else {
     kprintf("Invalid multiboot2 magic!\n");
   }
+
+  boot::setup(mbi_addr);
+
+  // Multiboot debug shit
+  // kprintf("magic=%x mbi=%x\n", magic, mbi_addr);
+
+  // module declarations
 
   logger::info("LosTacOS v%s booted\n", LTOS_VERSION);
   /* Idt testing shit

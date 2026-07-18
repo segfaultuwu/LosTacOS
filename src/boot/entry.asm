@@ -7,17 +7,32 @@ EXTERN kernel_main
 SECTION .multiboot
 align 8
 
-; WARNING: this shit was fixed by chatgpt
-
 header:
     dd 0xE85250D6
     dd 0
     dd header_end - header
     dd -(0xE85250D6 + (header_end - header))
 
+
+; framebuffer request
+align 8
+framebuffer_request:
+    dw 5
+    dw 0
+    dd 20
+
+    dd 1024
+    dd 768
+    dd 32
+
+
+; end tag (required)
+align 8
+end_tag:
     dw 0
     dw 0
     dd 8
+
 
 header_end:
 
@@ -73,7 +88,7 @@ _start:
 
     jmp CODE_SEL:long_mode_start
 
-
+    align 8
 
 BITS 64
 
@@ -175,28 +190,39 @@ setup_page_tables:
 
     ; PML4 -> PDP
     mov eax, pdp_table
-    or eax, 0b11
-
+    or eax, 3
     mov [pml4_table], eax
 
 
-    ; PDP -> PD
-    mov eax, pd_table
-    or eax, 0b11
+    ; PDP entries -> 4 page directories
 
+    mov eax, pd_table0
+    or eax, 3
     mov [pdp_table], eax
 
 
-    ; Identity map 16MB
-    ; 8 * 2MB pages
+    mov eax, pd_table1
+    or eax, 3
+    mov [pdp_table + 8], eax
 
-    mov ecx, 8
 
+    mov eax, pd_table2
+    or eax, 3
+    mov [pdp_table + 16], eax
+
+
+    mov eax, pd_table3
+    or eax, 3
+    mov [pdp_table + 24], eax
+
+
+    ; map 4GB
+    mov edi, pd_table0
     mov eax, 0x83
-    mov edi, pd_table
+    mov ecx, 2048
 
 
-.map_loop:
+.map:
 
     mov [edi], eax
 
@@ -204,11 +230,10 @@ setup_page_tables:
     add edi, 8
 
     dec ecx
-    jnz .map_loop
+    jnz .map
 
 
     ret
-
 
 
 SECTION .rodata
@@ -248,15 +273,20 @@ align 4096
 pml4_table:
     resb 4096
 
-
 pdp_table:
     resb 4096
 
-
-pd_table:
+pd_table0:
     resb 4096
 
+pd_table1:
+    resb 4096
 
+pd_table2:
+    resb 4096
+
+pd_table3:
+    resb 4096
 
 align 4
 

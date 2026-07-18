@@ -1,5 +1,6 @@
 #include "LTOS/lib/kprintf.h"
 #include "LTOS/console.hpp"
+#include "LTOS/drivers/serial.hpp"
 #include "LTOS/fs/vfs.hpp"
 
 #include <stdarg.h>
@@ -239,6 +240,8 @@ static void print_string(const char *str, int width = 0, bool left = false) {
 }
 
 void kvprintf(const char *fmt, va_list args) {
+  drivers::serial::writef(fmt, args);
+
   while (*fmt) {
     if (*fmt != '%') {
       print_char(*fmt++);

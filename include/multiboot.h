@@ -68,9 +68,38 @@ struct multiboot_module {
   const char *cmdline;
 };
 
+struct multiboot_tag_framebuffer_common {
+  uint32_t type;
+  uint32_t size;
+
+  uint64_t framebuffer_addr;
+
+  uint32_t framebuffer_pitch;
+  uint32_t framebuffer_width;
+  uint32_t framebuffer_height;
+
+  uint8_t framebuffer_bpp;
+  uint8_t framebuffer_type;
+};
+
 #ifdef __cplusplus
 namespace multiboot2 {
 #endif
+
+template <typename Fn> void for_each_tag(uint64_t mbi_phys_addr, Fn fn) {
+  uint8_t *mbi = (uint8_t *)mbi_phys_addr;
+
+  uint32_t total_size = *(uint32_t *)mbi;
+  struct multiboot_tag *tag = (struct multiboot_tag *)(mbi + 8);
+
+  while (tag->type != 0 && (uint8_t *)tag < mbi + total_size) {
+    fn(tag);
+
+    tag = (struct multiboot_tag *)((uint8_t *)tag +
+                                   ((tag->size + 7) & ~7)); // align to 8
+  }
+}
+
 void parse_info(uint64_t mbi_phys_addr);
 
 int list_modules(uint64_t mbi_phys_addr, struct multiboot_module *out,

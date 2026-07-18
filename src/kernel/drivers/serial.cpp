@@ -1,4 +1,6 @@
 #include "LTOS/drivers/serial.hpp"
+#include "LTOS/lib/kprintf.h"
+#include <cstdarg>
 
 namespace drivers::serial {
 
@@ -44,6 +46,19 @@ void write(const char *str) {
   while (*str) {
     write(*str++);
   }
+}
+
+void writef(const char *fmt, ...) {
+  char buffer[512];
+
+  va_list args;
+  va_start(args, fmt);
+
+  kvsnprintf(buffer, sizeof(buffer), fmt, args);
+
+  va_end(args);
+
+  write(buffer);
 }
 
 } // namespace drivers::serial

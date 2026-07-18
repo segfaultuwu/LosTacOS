@@ -2,7 +2,9 @@
 #include "LTOS/arch/x86_64/idt.hpp"
 #include "LTOS/arch/x86_64/paging.hpp"
 #include "LTOS/console.hpp"
+#include "LTOS/drivers/framebuffer.hpp"
 #include "LTOS/drivers/pic.hpp"
+#include "LTOS/drivers/psf.hpp"
 #include "LTOS/drivers/serial.hpp"
 #include "LTOS/drivers/tty.hpp"
 #include "LTOS/fs/vfs.hpp"
@@ -19,7 +21,11 @@ int setup(uint64_t mbi_addr) {
   drivers::serial::init();
   drivers::serial::write("Reached boot::setup()!\n");
 
-  vga::clear();
+  if (psf::get() == nullptr) {
+    logger::error("PSF Font not found!");
+    drivers::serial::write("PSF Font not found!");
+    return -1;
+  }
 
   logger::info("VGA Initialized");
 
