@@ -7,7 +7,13 @@
 
 namespace paging {
 
-alignas(4096) static uint64_t kernel_pml4[512];
+// Defined once in paging.cpp. This must NOT be 'static' here: a static
+// array declared in a header gives every translation unit that includes
+// this file its own private copy, silently disconnected from the one
+// actually loaded into CR3 -- any other .cpp writing to
+// "paging::kernel_pml4" would be modifying dead memory the CPU never
+// looks at.
+extern uint64_t kernel_pml4[512];
 
 void init();
 void enable_paging();

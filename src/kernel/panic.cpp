@@ -1,10 +1,12 @@
 #include "LTOS/panic.hpp"
-#include "LTOS/vga.hpp"
+#include "LTOS/console.hpp"
+#include <string.h>
 namespace panic {
 
 void halt(const char *msg) {
-  vga::write("\n\033[31mPANIC:\033[0m ");
-  vga::write(msg);
+  const char *panic = "\n\033[31mPANIC:\033[0m ";
+  console::write(panic, strlen(panic));
+  console::write(msg, strlen(msg));
 
   while (true)
     asm volatile("cli; hlt");

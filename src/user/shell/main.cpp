@@ -1,9 +1,9 @@
+#include "LTOS/console.hpp"
 #include "LTOS/drivers/keyboard.hpp"
 #include "LTOS/fs/vfs.hpp"
 #include "LTOS/lib/kprintf.h"
 #include "LTOS/mm/pmm.hpp"
 #include "LTOS/timer.hpp"
-#include "LTOS/vga.hpp"
 
 #include "multiboot.h"
 #include "string.h"
@@ -69,7 +69,7 @@ static void io_reset_out(ShellIO &io) {
 
 static void io_write_raw(ShellIO &io, const char *data, size_t len) {
   if (!io.capture) {
-    vga::write(data);
+    console::write(data, sizeof(data));
     return;
   }
 
@@ -155,7 +155,7 @@ static void cmd_pwd(int, char **, ShellIO &io) {
   io_printf(io, "%s\n", fs::vfs::get_path(fs::vfs::current_dir));
 }
 
-static void cmd_clear(int, char **, ShellIO &) { vga::clear(); }
+static void cmd_clear(int, char **, ShellIO &) { console::clear(); }
 
 static void cmd_echo(int argc, char **argv, ShellIO &io) {
   for (int i = 1; i < argc; i++) {
@@ -455,10 +455,9 @@ int shell_main(uint64_t mbi_phys_addr, multiboot_module *mb_out,
 
     if (input[0] == '\0')
       continue;
+    kprintf("\n");
 
     run_pipeline(input);
-
-    vga::write("\n");
   }
 
   return 0;

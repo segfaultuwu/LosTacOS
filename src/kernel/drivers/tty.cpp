@@ -1,13 +1,13 @@
 #include "LTOS/drivers/tty.hpp"
 
+#include "LTOS/console.hpp"
 #include "LTOS/fs/devfs.hpp"
-#include "LTOS/vga.hpp"
 
 namespace tty {
 
 static size_t tty_write(const char *buf, size_t len) {
   for (size_t i = 0; i < len; i++)
-    vga::put(buf[i]);
+    console::put(buf[i]);
 
   return len;
 }

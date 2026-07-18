@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdarg.h>
 #include <stdint.h>
 
 namespace drivers::serial {
@@ -14,5 +15,6 @@ void write(char c);
 
 void write(const char *str);
 void writef(const char *fmt, ...);
+void vwritef(const char *fmt, va_list args);
 
 } // namespace drivers::serial

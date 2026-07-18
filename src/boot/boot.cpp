@@ -50,6 +50,22 @@ int setup(uint64_t mbi_addr) {
   paging::enable_paging();
   logger::info("Paging Enabled");
 
+  {
+    uint64_t fb_base = (uint64_t)framebuffer::info.address;
+    uint64_t fb_size =
+        (uint64_t)framebuffer::info.pitch * framebuffer::info.height;
+
+    uint64_t fb_start = fb_base & ~0xFFFULL;
+    uint64_t fb_end = (fb_base + fb_size + 0xFFF) & ~0xFFFULL;
+
+    for (uint64_t addr = fb_start; addr < fb_end; addr += 0x1000) {
+      paging::map_page(paging::kernel_pml4, addr, addr,
+                       PAGE_PRESENT | PAGE_WRITABLE);
+    }
+
+    logger::info("Framebuffer mapped");
+  }
+
   heap::init();
   logger::info("Heap Initialized, size: %d KiB", (heap::HEAP_SIZE / 1024));
 

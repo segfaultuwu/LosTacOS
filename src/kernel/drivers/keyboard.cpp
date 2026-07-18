@@ -1,6 +1,6 @@
 #include "LTOS/drivers/keyboard.hpp"
+#include "LTOS/console.hpp"
 #include "LTOS/drivers/serial.hpp"
-#include "LTOS/vga.hpp"
 #include <stdint.h>
 #include <string.h>
 
@@ -155,7 +155,7 @@ char getchar() {
       c = apply_shift(c);
     }
 
-    vga::put(c);
+    console::put(c);
 
     return c;
   }

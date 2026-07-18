@@ -1,5 +1,5 @@
+#include "LTOS/arch/x86_64/paging.hpp"
 #include "LTOS/drivers/framebuffer.hpp"
-#include "LTOS/drivers/psf.hpp"
 #include "LTOS/drivers/serial.hpp"
 #include "LTOS/lib/kprintf.h"
 #include <cstdint>
@@ -22,12 +22,13 @@ void parse_info(uint64_t mbi_phys_addr) {
       drivers::serial::writef(
           "Found module: %s | Start: 0x%x | Size: %d bytes\n", name, start,
           size);
+
+      paging::reserve_below(end);
+
       break;
     }
     case 8: {
       framebuffer::init((uint64_t)tag);
-      framebuffer::clear(0x00202020);
-
       break;
     }
     }

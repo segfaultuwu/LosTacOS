@@ -13,4 +13,6 @@ void put(char c);
 
 void set_font(psf::Font *f);
 
+void clear();
+
 } // namespace console

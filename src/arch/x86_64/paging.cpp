@@ -1,10 +1,13 @@
 #include "LTOS/arch/x86_64/paging.hpp"
+#include "LTOS/drivers/framebuffer.hpp"
 #include "LTOS/kernel.hpp"
 #include "LTOS/logger.hpp"
 
 using page_t = uint64_t;
 
 namespace paging {
+
+alignas(4096) uint64_t kernel_pml4[512];
 
 static uint64_t next_free;
 static uint64_t reserved_end = 0;
@@ -127,25 +130,35 @@ void setup_kernel_identity() {
 void enable_paging() {
   uint64_t cr3 = (uint64_t)kernel_pml4;
 
+  uint64_t fb_addr = (uint64_t)framebuffer::get_address();
+  uint64_t fb_size = framebuffer::get_pitch() * framebuffer::get_height();
+
+  logger::info("Mapping framebuffer");
+
+  for (uint64_t addr = fb_addr; addr < fb_addr + fb_size; addr += 0x1000) {
+
+    map_page(kernel_pml4, addr, addr, PAGE_PRESENT | PAGE_WRITABLE);
+  }
+
+  logger::info("Framebuffer mapped");
+
   asm volatile("mov %0, %%cr3" : : "r"(cr3) : "memory");
 
   logger::info("CR3 loaded");
 
   uint64_t cr4;
-
   asm volatile("mov %%cr4,%0" : "=r"(cr4));
 
-  cr4 |= (1 << 5);
-
+  cr4 |= (1 << 5); // PAE
   asm volatile("mov %0,%%cr4" : : "r"(cr4));
 
   uint64_t cr0;
-
   asm volatile("mov %%cr0,%0" : "=r"(cr0));
 
-  cr0 |= (1ULL << 31);
-
+  cr0 |= (1ULL << 31); // PG
   asm volatile("mov %0,%%cr0" : : "r"(cr0));
+
+  logger::info("Paging enabled");
 }
 
 uint64_t *create_address_space() {

@@ -1,5 +1,8 @@
 #include "LTOS/arch/x86_64/paging.hpp"
 #include "LTOS/boot.hpp"
+#include "LTOS/console.hpp"
+#include "LTOS/drivers/framebuffer.hpp"
+#include "LTOS/drivers/psf.hpp"
 #include "LTOS/drivers/serial.hpp"
 #include "LTOS/lib/kprintf.h"
 #include "LTOS/logger.hpp"
@@ -20,17 +23,21 @@ extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
 
   if (magic == 0x36d76289) {
     multiboot2::parse_info(mbi_addr);
+    psf::find_font(mbi_addr);
   } else {
     kprintf("Invalid multiboot2 magic!\n");
   }
 
-  boot::setup(mbi_addr);
+  int setup_result = boot::setup(mbi_addr);
+
+  if (setup_result != 0) {
+    panic::halt("boot::setup() failed");
+  }
 
   // Multiboot debug shit
   // kprintf("magic=%x mbi=%x\n", magic, mbi_addr);
 
   // module declarations
-
   logger::info("LosTacOS v%s booted\n", LTOS_VERSION);
   /* Idt testing shit
    *

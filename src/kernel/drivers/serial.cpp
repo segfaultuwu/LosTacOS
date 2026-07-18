@@ -48,17 +48,21 @@ void write(const char *str) {
   }
 }
 
-void writef(const char *fmt, ...) {
+void vwritef(const char *fmt, va_list args) {
   char buffer[512];
-
-  va_list args;
-  va_start(args, fmt);
 
   kvsnprintf(buffer, sizeof(buffer), fmt, args);
 
-  va_end(args);
-
   write(buffer);
+}
+
+void writef(const char *fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+
+  vwritef(fmt, args);
+
+  va_end(args);
 }
 
 } // namespace drivers::serial

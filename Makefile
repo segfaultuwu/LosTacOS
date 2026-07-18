@@ -49,7 +49,7 @@ $(KERNEL): build version $(OBJ)
 iso: $(KERNEL)
 	mkdir -p build/isodir/boot/grub
 	cp $(KERNEL) build/isodir/boot/kernel.elf
-	cp assets/ter-c16b.psf build/isodir/boot/font.psf
+	cp assets/font.psf build/isodir/boot/font.psf
 
 	echo 'set timeout=0' > build/isodir/boot/grub/grub.cfg
 	echo 'set default=0' >> build/isodir/boot/grub/grub.cfg

@@ -240,7 +240,10 @@ static void print_string(const char *str, int width = 0, bool left = false) {
 }
 
 void kvprintf(const char *fmt, va_list args) {
-  drivers::serial::writef(fmt, args);
+  va_list args_copy;
+  va_copy(args_copy, args);
+  drivers::serial::vwritef(fmt, args_copy);
+  va_end(args_copy);
 
   while (*fmt) {
     if (*fmt != '%') {

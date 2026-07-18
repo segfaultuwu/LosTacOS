@@ -11,6 +11,9 @@ struct Font {
   uint32_t glyph_count;
   uint32_t width;
   uint32_t height;
+
+  uint32_t glyph_size;
+  uint32_t bytes_per_row;
 };
 
 bool load(void *data, size_t size, Font *font);
