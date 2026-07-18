@@ -26,7 +26,7 @@ OBJ_C   = $(SRC_C:.c=.c.o)
 
 OBJ = $(OBJ_CPP) $(OBJ_C) $(OBJ_ASM)
 
-KERNEL = build/kernel.bin
+KERNEL = build/kernel.elf
 ISO = build/LosTacOS-x86_64.iso
 
 all: iso
@@ -48,12 +48,12 @@ $(KERNEL): build version $(OBJ)
 
 iso: $(KERNEL)
 	mkdir -p build/isodir/boot/grub
-	cp $(KERNEL) build/isodir/boot/kernel.bin
+	cp $(KERNEL) build/isodir/boot/kernel.elf
 
 	echo 'set timeout=0' > build/isodir/boot/grub/grub.cfg
 	echo 'set default=0' >> build/isodir/boot/grub/grub.cfg
 	echo 'menuentry "LosTacOS" {' >> build/isodir/boot/grub/grub.cfg
-	echo '  multiboot2 /boot/kernel.bin' >> build/isodir/boot/grub/grub.cfg
+	echo '  multiboot2 /boot/kernel.elf' >> build/isodir/boot/grub/grub.cfg
 	echo '  boot' >> build/isodir/boot/grub/grub.cfg
 	echo '}' >> build/isodir/boot/grub/grub.cfg
 
@@ -70,4 +70,4 @@ run: iso
 		-no-shutdown
 
 clean:
-	rm -rf build $(OBJ_CPP) $(OBJ_ASM)
+	rm -rf build $(OBJ_CPP) $(OBJ_ASM) $(OBJ_C)
