@@ -445,8 +445,6 @@ int shell_main(uint64_t mbi_phys_addr, multiboot_module *mb_out,
   shell_modules = mb_out;
   shell_module_count = mb_max_count;
 
-  vga::write("Welcome to LosShellos!\n");
-
   while (shell_running) {
     kprintf("\033[32mroot@lostacos\033[0m:"
             "\033[34m%s\033[0m"

@@ -1,8 +1,10 @@
 #include "LTOS/arch/x86_64/gdt.hpp"
 #include "LTOS/arch/x86_64/idt.hpp"
 #include "LTOS/arch/x86_64/paging.hpp"
+#include "LTOS/console.hpp"
 #include "LTOS/drivers/pic.hpp"
 #include "LTOS/drivers/serial.hpp"
+#include "LTOS/drivers/tty.hpp"
 #include "LTOS/fs/vfs.hpp"
 #include "LTOS/logger.hpp"
 #include "LTOS/mm/heap.hpp"
@@ -18,6 +20,7 @@ int setup(uint64_t mbi_addr) {
   drivers::serial::write("Reached boot::setup()!\n");
 
   vga::clear();
+
   logger::info("VGA Initialized");
 
   drivers::pic::init();
@@ -46,6 +49,11 @@ int setup(uint64_t mbi_addr) {
 
   fs::vfs::init();
   logger::info("VFS Initialized");
+
+  tty::init();
+
+  console::init();
+  logger::info("Console Initialized");
 
   asm volatile("sti");
   return 0;

@@ -1,4 +1,5 @@
 #include "LTOS/fs/vfs.hpp"
+#include "LTOS/fs/devfs.hpp"
 #include "LTOS/lib/kprintf.h"
 #include "LTOS/mm/heap.hpp"
 
@@ -46,7 +47,10 @@ void init() {
   // Create the basic directories
   create_dir("root");
   create_dir("tmp");
+
   create_dir("dev");
+  fs::devfs::init();
+
   create_dir("proc");
   create_dir("sys");
   create_dir("home");
@@ -58,26 +62,58 @@ void init() {
   create_dir("mnt");
 }
 
-static Node *create_node(const char *name, bool directory) {
+Node *create_node(const char *name, bool directory, Node *parent) {
   Node *node = (Node *)heap::kmalloc(sizeof(Node));
 
   node->name = strdup(name);
   node->directory = directory;
 
-  node->parent = current_dir;
+  node->parent = parent;
 
   node->children = nullptr;
   node->file = nullptr;
+  node->dev = nullptr;
 
-  node->next = current_dir->children;
-  current_dir->children = node;
+  node->next = parent->children;
+  parent->children = node;
 
   return node;
 }
 
-Node *create_file(const char *name) { return create_node(name, false); }
+Node *create_dev(const char *name, devfs::DevOps *dev) {
+  Node *dev_dir = find("/dev");
 
-Node *create_dir(const char *name) { return create_node(name, true); }
+  if (!dev_dir) {
+    kprintf("devfs: /dev missing\n");
+    return nullptr;
+  }
+
+  Node *node = create_node(name, false, dev_dir);
+
+  node->dev = dev;
+
+  return node;
+}
+
+size_t write(Node *node, const char *buf, size_t len) {
+  if (!node)
+    return 0;
+
+  if (node->dev) {
+    node->dev->write(buf, len);
+    return len;
+  }
+
+  return 0;
+}
+
+Node *create_file(const char *name) {
+  return create_node(name, false, current_dir);
+}
+
+Node *create_dir(const char *name) {
+  return create_node(name, true, current_dir);
+}
 
 char *get_name(Node *node) { return (char *)node->name; }
 
@@ -133,7 +169,6 @@ Node *find(const char *path) {
 
   Node *node;
 
-  // absolutna czy relatywna
   if (path[0] == '/')
     node = root;
   else
@@ -170,6 +205,8 @@ Node *find(const char *path) {
 
   return node;
 }
+
+Node *get_dev_dir() { return find("/dev"); }
 
 Node *find_in(Node *dir, const char *name) {
   Node *node = dir->children;
@@ -392,6 +429,38 @@ bool remove(const char *path) {
   heap::kfree(node);
 
   return true;
+}
+
+int read(Node *node, char *buf, int size) {
+  if (!node)
+    return -1;
+
+  if (node->type == VFS_DEV && node->dev && node->dev->read)
+    return node->dev->read(buf, size);
+
+  if (!node->directory && node->file && node->file->private_data) {
+    int len = node->file->size < (size_t)size ? node->file->size : size;
+
+    for (int i = 0; i < len; i++)
+      buf[i] = ((char *)node->file->private_data)[i];
+
+    return len;
+  }
+
+  return -1;
+}
+
+int write(Node *node, const char *buf, int size) {
+  if (!node)
+    return -1;
+
+  if (node->type == VFS_DEV && node->dev && node->dev->write)
+    return node->dev->write(buf, size);
+
+  if (!node->directory)
+    return write_content(node->name, buf, size) ? size : -1;
+
+  return -1;
 }
 
 } // namespace fs::vfs

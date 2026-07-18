@@ -1,15 +1,15 @@
 #include "LTOS/lib/kprintf.h"
-#include "LTOS/vga.hpp"
+#include "LTOS/console.hpp"
+#include "LTOS/fs/vfs.hpp"
 
 #include <stdarg.h>
 #include <stdint.h>
 
 #include "LTOS/lib/kprintf.h"
-#include "LTOS/vga.hpp"
 #include <stdarg.h>
 #include <stdint.h>
 
-// ================= snprintf-style buffer sink =================
+static fs::vfs::Node *stdout_tty;
 
 struct SnBuf {
   char *buf;
@@ -174,7 +174,7 @@ int kvsnprintf(char *buf, size_t size, const char *fmt, va_list args) {
   return (int)sb.pos;
 }
 
-static void print_char(char c) { vga::put(c); }
+static void print_char(char c) { console::put(c); }
 
 static int number_length(uint64_t value, int base) {
   int len = 1;
