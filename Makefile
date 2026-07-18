@@ -9,6 +9,11 @@ CXXFLAGS = -std=c++23 -ffreestanding -O2 -Wall -Wextra \
 					 -fno-stack-protector -mno-sse -mno-sse2 \
 					 -mno-mmx -mno-avx -mgeneral-regs-only
 
+CFLAGS = -std=c23 -ffreestanding -O2 -Wall -Wextra \
+         -fno-builtin -Iinclude/ \
+         -mno-red-zone -mno-sse -mno-sse2 \
+         -mno-mmx -mno-avx -mgeneral-regs-only
+
 LDFLAGS = -T linker.ld -nostdlib -z max-page-size=0x1000
 
 SRC_CPP = $(shell find src -name "*.cpp")
@@ -33,9 +38,7 @@ build:
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 %.c.o: %.c
-	gcc -std=c23 -ffreestanding -O2 -Wall -Wextra \
-	    -fno-builtin -Iinclude/ \
-	    -c $< -o $@
+	gcc $(CFLAGS) -c $< -o $@
 
 %.asm.o: %.asm
 	$(AS) -f elf64 $< -o $@

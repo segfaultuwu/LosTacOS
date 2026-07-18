@@ -114,3 +114,28 @@ int strncmp(const char *a, const char *b, size_t n) {
 
   return 0;
 }
+
+int strsplt(char *str, char *argv[], int max_args) {
+  int argc = 0;
+
+  while (*str && argc < max_args) {
+    while (*str == ' ')
+      str++;
+
+    if (*str == '\0')
+      break;
+
+    argv[argc++] = str;
+
+    // znajdź koniec argumentu
+    while (*str && *str != ' ')
+      str++;
+
+    if (*str) {
+      *str = '\0';
+      str++;
+    }
+  }
+
+  return argc;
+}

@@ -27,6 +27,8 @@ int strcmp(const char *a, const char *b);
 
 int strncmp(const char *a, const char *b, size_t n);
 
+int strsplt(char *str, char *argv[], int max_args);
+
 #ifdef __cplusplus
 }
 #endif
