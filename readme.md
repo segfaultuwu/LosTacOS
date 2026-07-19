@@ -2,6 +2,7 @@
 
 > [!WARNING]
 > This shit is for research purposes only, it was made using 3 steps: hoping, coping, vibe coding.
+> And no, this is not 100% vibe coded..
 
 ## Description
 
