@@ -1,6 +1,8 @@
 #include "string.h"
 #include <stdint.h>
 
+extern "C" {
+
 void *memcpy(void *dest, const void *src, size_t n) {
   uint8_t *d = (uint8_t *)dest;
   const uint8_t *s = (const uint8_t *)src;
@@ -30,7 +32,7 @@ void *memcpy(void *dest, const void *src, size_t n) {
 }
 
 void *memset(void *dest, int value, size_t count) {
-  unsigned char *ptr = dest;
+  unsigned char *ptr = (unsigned char *)dest;
 
   while (count--)
     *ptr++ = (unsigned char)value;
@@ -39,8 +41,8 @@ void *memset(void *dest, int value, size_t count) {
 }
 
 void *memmove(volatile void *dest, const volatile void *src, size_t n) {
-  volatile unsigned char *d = dest;
-  const volatile unsigned char *s = src;
+  volatile unsigned char *d = (unsigned char *)dest;
+  const volatile unsigned char *s = (unsigned char *)src;
 
   if (d < s) {
     for (size_t i = 0; i < n; i++)
@@ -54,8 +56,8 @@ void *memmove(volatile void *dest, const volatile void *src, size_t n) {
 }
 
 int memcmp(const void *ptr1, const void *ptr2, size_t n) {
-  const unsigned char *a = ptr1;
-  const unsigned char *b = ptr2;
+  const unsigned char *a = (unsigned char *)ptr1;
+  const unsigned char *b = (unsigned char *)ptr2;
 
   for (size_t i = 0; i < n; i++) {
     if (a[i] != b[i])
@@ -146,7 +148,6 @@ int strsplt(char *str, char *argv[], int max_args) {
 
     argv[argc++] = str;
 
-    // znajdź koniec argumentu
     while (*str && *str != ' ')
       str++;
 
@@ -157,4 +158,5 @@ int strsplt(char *str, char *argv[], int max_args) {
   }
 
   return argc;
+}
 }

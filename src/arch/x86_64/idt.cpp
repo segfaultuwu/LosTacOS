@@ -50,11 +50,10 @@ void init() {
   for (int i = 0; i < 256; i++) {
     set_gate(i, isr_stub_table[i]); // was: set_gate(i, 0);
   }
-  set_gate(0, (uint64_t)isr0);
+  set_gate(0, (uint64_t)isr_stub_table[0]);
   set_gate(32, (uint64_t)irq0);
-
-  // keyboard
   set_gate(33, (uint64_t)irq1_handler);
+
   drivers::pic::enable_irq(1);
 
   idtr.limit = sizeof(idt) - 1;

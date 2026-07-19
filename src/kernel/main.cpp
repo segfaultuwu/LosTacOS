@@ -1,14 +1,24 @@
 #include "LTOS/arch/x86_64/paging.hpp"
 #include "LTOS/boot.hpp"
 #include "LTOS/drivers/psf.hpp"
-#include "LTOS/drivers/serial.hpp"
 #include "LTOS/lib/kprintf.h"
 #include "LTOS/logger.hpp"
 #include "LTOS/panic.hpp"
+#include "LTOS/sched/scheduler.hpp"
 #include "LTOS_gen/version.h"
 #include "multiboot.h"
 
-extern int shell_main(uint64_t mbi_phys_addr, struct multiboot_module *mb_out, int mb_max_count);
+void test_task1() {
+  while (true) {
+    logger::info("1");
+  }
+}
+
+void test_task2() {
+  while (true) {
+    logger::info("2");
+  }
+}
 
 extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
   if (magic == 0x36d76289) {
@@ -66,8 +76,16 @@ extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
   *test1 = 2137;
   logger::test("Heap: test1 = %d", *test1);
 
-  drivers::serial::write("About to run shell..\n");
-  int err = shell_main(mbi_addr, mods, 8);
-  kprintf("Shell exited with code %d", err);
+  logger::info("Creating task1");
+  sched::create(test_task1);
+  logger::info("Creating task2");
+  sched::create(test_task2);
+
+  asm volatile("sti");
+
+  while (true) {
+    asm volatile("hlt");
+  }
+
   panic::halt("Should not exit the main loop.");
 }

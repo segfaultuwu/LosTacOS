@@ -38,11 +38,17 @@ uint64_t get_uptime_d() {
   return (counter / frequency) / 60 / 60 / 24;
 }
 
-uint64_t get_uptime_sec() { return counter / frequency; }
+uint64_t get_uptime_sec() {
+  return counter / frequency;
+}
 
-void tick() { counter++; }
+void tick() {
+  counter++;
+}
 
-uint64_t ticks() { return counter; }
+uint64_t ticks() {
+  return counter;
+}
 
 void sleep(uint64_t ms) {
   uint64_t start = counter;

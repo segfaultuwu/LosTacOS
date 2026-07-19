@@ -13,6 +13,7 @@
 #include "LTOS/mm/heap.hpp"
 #include "LTOS/mm/pmm.hpp"
 #include "LTOS/mm/vmm.hpp"
+#include "LTOS/sched/scheduler.hpp"
 #include <cstdint>
 
 namespace boot {
@@ -81,7 +82,9 @@ int setup(uint64_t mbi_addr) {
   console::init();
   logger::info("Console Initialized");
 
-  asm volatile("sti");
+  sched::init();
+  logger::info("Scheduler initialized");
+
   return 0;
 }
 } // namespace boot
