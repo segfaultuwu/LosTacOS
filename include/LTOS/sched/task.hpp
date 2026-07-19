@@ -36,7 +36,7 @@ struct Registers {
   uint64_t ss;
 };
 
-enum State { READY, RUNNING, DEAD };
+enum class State { READY, RUNNING, BLOCKED, DEAD };
 
 struct Task {
 

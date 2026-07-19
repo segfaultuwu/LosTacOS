@@ -29,6 +29,10 @@ OBJ = $(OBJ_CPP) $(OBJ_C) $(OBJ_ASM)
 KERNEL = build/kernel.elf
 ISO = build/LosTacOS-x86_64.iso
 
+TAR = tar
+ROOTFS = build/rootfs
+TARFS = build/rootfs.tar
+
 all: iso
 
 build:
@@ -46,9 +50,28 @@ build:
 $(KERNEL): build version $(OBJ)
 	$(LD) $(LDFLAGS) -o $(KERNEL) $(OBJ)
 
-iso: $(KERNEL)
+user:
+	nasm -f elf64 bin/hello.asm -o bin/hello.o
+	ld -o bin/hello bin/hello.o
+
+tarfs: user
+	mkdir -p $(ROOTFS)
+	mkdir -p $(ROOTFS)/usr/bin
+	mkdir -p $(ROOTFS)/usr/lib
+	mkdir -p $(ROOTFS)/dev
+	mkdir -p $(ROOTFS)/proc
+	mkdir -p $(ROOTFS)/sys
+	mkdir -p $(ROOTFS)/tmp
+	mkdir -p $(ROOTFS)/bin
+
+	cp -r bin/hello $(ROOTFS)/bin/
+
+	$(TAR) --format=ustar -cf $(TARFS) -C $(ROOTFS) .
+
+iso: $(KERNEL) tarfs
 	mkdir -p build/isodir/boot/grub
 	cp $(KERNEL) build/isodir/boot/kernel.elf
+	cp $(TARFS) build/isodir/boot/rootfs.tar
 	cp assets/font.psf build/isodir/boot/font.psf
 
 	echo 'set timeout=0' > build/isodir/boot/grub/grub.cfg
@@ -56,6 +79,7 @@ iso: $(KERNEL)
 	echo 'menuentry "LosTacOS" {' >> build/isodir/boot/grub/grub.cfg
 	echo '  multiboot2 /boot/kernel.elf' >> build/isodir/boot/grub/grub.cfg
 	echo '  module2 /boot/font.psf font.psf' >> build/isodir/boot/grub/grub.cfg
+	echo '  module2 /boot/rootfs.tar rootfs.tar' >> build/isodir/boot/grub/grub.cfg
 	echo '  boot' >> build/isodir/boot/grub/grub.cfg
 	echo '}' >> build/isodir/boot/grub/grub.cfg
 

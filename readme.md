@@ -25,6 +25,7 @@ LosTacOS is a simple operating system written in C/C++/NASM. It is designed to b
 - **GCC** - for compiling the kernel
 - **GDB** - for debugging the kernel
 - **Make** - for building the OS
+- **TAR** - for building the rootfs.tar
 
 ## Shortcuts:
 

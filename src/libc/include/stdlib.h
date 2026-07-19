@@ -7,54 +7,54 @@
  * Memory management
  */
 
-void *malloc(size_t size);
+extern void *malloc(size_t size);
 
-void *calloc(size_t count, size_t size);
+extern void *calloc(size_t count, size_t size);
 
-void *realloc(void *ptr, size_t size);
+extern void *realloc(void *ptr, size_t size);
 
-void free(void *ptr);
+extern void free(void *ptr);
 
 /*
  * Program control
  */
 
-void exit(int status);
+extern void exit(int status);
 
-void abort(void);
+extern void abort(void);
 
 /*
  * Conversion
  */
 
-int atoi(const char *str);
+extern int atoi(const char *str);
 
-long atol(const char *str);
+extern long atol(const char *str);
 
-long strtol(const char *str, char **endptr, int base);
+extern long strtol(const char *str, char **endptr, int base);
 
 /*
  * Random
  */
 
-int rand(void);
+extern int rand(void);
 
-void srand(unsigned int seed);
+extern void srand(unsigned int seed);
 
 /*
  * Absolute value
  */
 
-int abs(int value);
+extern int abs(int value);
 
-long labs(long value);
+extern long labs(long value);
 
 /*
  * Environment
  */
 
-char *getenv(const char *name);
+extern char *getenv(const char *name);
 
-int setenv(const char *name, const char *value, int overwrite);
+extern int setenv(const char *name, const char *value, int overwrite);
 
-int unsetenv(const char *name);
+extern int unsetenv(const char *name);

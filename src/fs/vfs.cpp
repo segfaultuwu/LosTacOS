@@ -1,5 +1,6 @@
 #include "LTOS/fs/vfs.hpp"
 #include "LTOS/fs/devfs.hpp"
+#include "LTOS/fs/tarfs.hpp"
 #include "LTOS/lib/kprintf.h"
 #include "LTOS/mm/heap.hpp"
 
@@ -35,6 +36,7 @@ void init() {
 
   root->name = strdup("/");
   root->directory = true;
+  root->type = VFS_DIR;
 
   root->parent = nullptr;
 
@@ -43,23 +45,7 @@ void init() {
   root->file = nullptr;
 
   current_dir = root;
-
-  // Create the basic directories
-  create_dir("root");
-  create_dir("tmp");
-
-  create_dir("dev");
   fs::devfs::init();
-
-  create_dir("proc");
-  create_dir("sys");
-  create_dir("home");
-  create_dir("bin");
-  create_dir("etc");
-  create_dir("usr");
-  create_dir("var");
-  create_dir("lib");
-  create_dir("mnt");
 }
 
 Node *create_node(const char *name, bool directory, Node *parent) {
@@ -67,6 +53,7 @@ Node *create_node(const char *name, bool directory, Node *parent) {
 
   node->name = strdup(name);
   node->directory = directory;
+  node->type = directory ? VFS_DIR : VFS_FILE;
 
   node->parent = parent;
 
@@ -91,6 +78,7 @@ Node *create_dev(const char *name, devfs::DevOps *dev) {
   Node *node = create_node(name, false, dev_dir);
 
   node->dev = dev;
+  node->type = VFS_DEV;
 
   return node;
 }
@@ -113,6 +101,79 @@ Node *create_file(const char *name) {
 
 Node *create_dir(const char *name) {
   return create_node(name, true, current_dir);
+}
+
+static Node *ensure_dir(Node *parent, const char *name) {
+  Node *node = find_in(parent, name);
+
+  if (node)
+    return node;
+
+  return create_node(name, true, parent);
+}
+
+Node *create_dir_path(const char *path) {
+  if (!path)
+    return nullptr;
+
+  Node *dir = root;
+
+  char part[128];
+  size_t idx = 0;
+
+  for (size_t i = 0;; i++) {
+    if (path[i] == '/' || path[i] == 0) {
+      part[idx] = 0;
+
+      if (idx > 0) {
+        dir = ensure_dir(dir, part);
+      }
+
+      idx = 0;
+
+      if (path[i] == 0)
+        break;
+
+    } else {
+      part[idx++] = path[i];
+    }
+  }
+
+  return dir;
+}
+
+Node *create_file_path(const char *path) {
+  if (!path)
+    return nullptr;
+
+  Node *dir = root;
+
+  char part[128];
+  size_t idx = 0;
+
+  size_t len = 0;
+  while (path[len])
+    len++;
+
+  for (size_t i = 0; i <= len; i++) {
+    if (path[i] == '/' || path[i] == 0) {
+      part[idx] = 0;
+
+      if (path[i] == 0) {
+        return create_node(part, false, dir);
+      }
+
+      if (idx > 0) {
+        dir = ensure_dir(dir, part);
+      }
+
+      idx = 0;
+    } else {
+      part[idx++] = path[i];
+    }
+  }
+
+  return nullptr;
 }
 
 char *get_name(Node *node) {

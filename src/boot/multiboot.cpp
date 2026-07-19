@@ -1,9 +1,11 @@
 #include "LTOS/arch/x86_64/paging.hpp"
 #include "LTOS/drivers/framebuffer.hpp"
 #include "LTOS/drivers/serial.hpp"
+#include "LTOS/fs/tarfs.hpp"
 #include "LTOS/lib/kprintf.h"
 #include <cstdint>
 #include <multiboot.h>
+#include <string.h>
 
 namespace multiboot2 {
 
@@ -22,7 +24,9 @@ void parse_info(uint64_t mbi_phys_addr) {
                               size);
 
       paging::reserve_below(end);
-
+      if (strcmp(mod->cmdline, "rootfs.tar") == 0) {
+        fs::tarfs::mount((void *)mod->mod_start, mod->mod_end - mod->mod_start);
+      }
       break;
     }
     case 8: {

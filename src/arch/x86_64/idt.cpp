@@ -26,7 +26,7 @@ struct IDTPointer {
 
 static IDTEntry idt[256];
 
-void set_gate(uint8_t vector, uint64_t handler) {
+void set_gate(uint8_t vector, uint64_t handler, uint8_t dpl) {
   IDTEntry &entry = idt[vector];
 
   entry.offset_low = handler & 0xffff;
@@ -35,7 +35,9 @@ void set_gate(uint8_t vector, uint64_t handler) {
 
   entry.ist = 0;
 
-  entry.type_attr = 0x8E;
+  // 0x8E = present, interrupt gate, DPL 0. OR in the requested DPL (bits 5-6)
+  // so ring 3 code can reach gates like the syscall vector via `int`.
+  entry.type_attr = 0x8E | ((dpl & 0x3) << 5);
 
   entry.offset_mid = (handler >> 16) & 0xffff;
 
@@ -53,6 +55,7 @@ void init() {
   set_gate(0, (uint64_t)isr_stub_table[0]);
   set_gate(32, (uint64_t)irq0);
   set_gate(33, (uint64_t)irq1_handler);
+  set_gate(128, (uint64_t)isr128, 3); // int 0x80 syscall gate, callable from ring 3
 
   drivers::pic::enable_irq(1);
 

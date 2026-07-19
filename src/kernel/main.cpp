@@ -1,6 +1,8 @@
 #include "LTOS/arch/x86_64/paging.hpp"
 #include "LTOS/boot.hpp"
 #include "LTOS/drivers/psf.hpp"
+#include "LTOS/fs/tarfs.hpp"
+#include "LTOS/fs/vfs.hpp"
 #include "LTOS/lib/kprintf.h"
 #include "LTOS/logger.hpp"
 #include "LTOS/panic.hpp"
@@ -8,19 +10,22 @@
 #include "LTOS_gen/version.h"
 #include "multiboot.h"
 
-void test_task1() {
-  while (true) {
-    logger::info("1");
-  }
-}
+// void test_task1() {
+//   while (true) {
+//     logger::info("1");
+//     sched::yield();
+//   }
+// }
 
-void test_task2() {
-  while (true) {
-    logger::info("2");
-  }
-}
+// void test_task2() {
+//   while (true) {
+//     logger::info("2");
+//     sched::yield();
+//   }
+// }
 
 extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
+  fs::vfs::init();
   if (magic == 0x36d76289) {
     uint32_t mbi_total_size = *(uint32_t *)mbi_addr;
     paging::reserve_below(mbi_addr + mbi_total_size);
@@ -34,6 +39,10 @@ extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
   } else {
     kprintf("Invalid multiboot2 magic!\n");
   }
+
+  fs::tarfs::mount_vfs();
+  fs::tarfs::list();
+  logger::info("VFS Initialized");
 
   int setup_result = boot::setup(mbi_addr);
 
@@ -75,13 +84,15 @@ extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
   int *test1 = new int;
   *test1 = 2137;
   logger::test("Heap: test1 = %d", *test1);
+  fs::vfs::list_dir(fs::vfs::root);
+  fs::vfs::find("/bin");
+  fs::vfs::find("/bin/hello");
+  sched::exec("/bin/hello");
 
-  logger::info("Creating task1");
-  sched::create(test_task1);
-  logger::info("Creating task2");
-  sched::create(test_task2);
-
-  asm volatile("sti");
+  // logger::info("Creating task1");
+  // sched::create(test_task1);
+  // logger::info("Creating task2");
+  // sched::create(test_task2);
 
   while (true) {
     asm volatile("hlt");

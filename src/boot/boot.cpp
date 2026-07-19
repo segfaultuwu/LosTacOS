@@ -8,13 +8,17 @@
 #include "LTOS/drivers/serial.hpp"
 #include "LTOS/drivers/timer.hpp"
 #include "LTOS/drivers/tty.hpp"
+#include "LTOS/fs/tarfs.hpp"
 #include "LTOS/fs/vfs.hpp"
 #include "LTOS/logger.hpp"
 #include "LTOS/mm/heap.hpp"
 #include "LTOS/mm/pmm.hpp"
 #include "LTOS/mm/vmm.hpp"
 #include "LTOS/sched/scheduler.hpp"
+#include "LTOS/state.hpp"
 #include <cstdint>
+
+bool state::vfs_initialized = false;
 
 namespace boot {
 
@@ -23,6 +27,8 @@ int setup(uint64_t mbi_addr) {
 
   drivers::serial::init();
   drivers::serial::write("Reached boot::setup()!\n");
+
+  state::vfs_initialized = true;
 
   if (psf::get() == nullptr) {
     logger::error("PSF Font not found!");
@@ -33,7 +39,7 @@ int setup(uint64_t mbi_addr) {
   logger::info("VGA Initialized");
 
   drivers::pic::init();
-  timer::init(100);
+  timer::init(250);
   logger::info("PIC, PIT Initialized");
 
   gdt::init();
@@ -72,9 +78,6 @@ int setup(uint64_t mbi_addr) {
 
   framebuffer::init_backbuffer();
   logger::info("Framebuffer Initialized");
-
-  fs::vfs::init();
-  logger::info("VFS Initialized");
 
   tty::init();
   logger::info("TTY Initialized");

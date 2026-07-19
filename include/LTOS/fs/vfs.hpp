@@ -21,7 +21,7 @@ struct File {
   int (*write)(File *file, const uint8_t *buffer, size_t size);
 };
 
-enum NodeType { VFS_FILE, VFS_DIR, VFS_DEV };
+enum NodeType { VFS_FILE, VFS_DIR, VFS_DEV, VFS_TAR };
 
 struct Node {
 
@@ -32,8 +32,8 @@ struct Node {
   NodeType type;
 
   Node *parent;
-  Node *children;
   Node *next;
+  Node *children;
 
   File *file;
 
@@ -50,6 +50,8 @@ Node *create_file(const char *name);
 Node *create_dir(const char *name);
 Node *create_dev(const char *name, DevOps *dev);
 Node *create_node(const char *name, bool directory, Node *parent);
+Node *create_file_path(const char *path);
+Node *create_dir_path(const char *path);
 
 // Search
 Node *find(const char *name);
