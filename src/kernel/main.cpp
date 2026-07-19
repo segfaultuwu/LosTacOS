@@ -9,6 +9,7 @@
 #include "LTOS/sched/scheduler.hpp"
 #include "LTOS_gen/version.h"
 #include "multiboot.h"
+#include <cstdint>
 
 // void test_task1() {
 //   while (true) {
@@ -41,9 +42,7 @@ extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
   }
 
   fs::tarfs::mount_vfs();
-  fs::tarfs::list();
   logger::info("VFS Initialized");
-
   int setup_result = boot::setup(mbi_addr);
 
   if (setup_result != 0) {
@@ -84,9 +83,15 @@ extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
   int *test1 = new int;
   *test1 = 2137;
   logger::test("Heap: test1 = %d", *test1);
+
+  kprintf("ROOT:\n");
   fs::vfs::list_dir(fs::vfs::root);
-  fs::vfs::find("/bin");
-  fs::vfs::find("/bin/hello");
+
+  auto bin = fs::vfs::find("/bin");
+  auto hello = fs::vfs::find("/bin/hello");
+
+  kprintf("bin=%x\n", (uint64_t)bin);
+  kprintf("hello=%x\n", (uint64_t)hello);
   sched::exec("/bin/hello");
 
   // logger::info("Creating task1");

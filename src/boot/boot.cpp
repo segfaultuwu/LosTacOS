@@ -28,8 +28,6 @@ int setup(uint64_t mbi_addr) {
   drivers::serial::init();
   drivers::serial::write("Reached boot::setup()!\n");
 
-  state::vfs_initialized = true;
-
   if (psf::get() == nullptr) {
     logger::error("PSF Font not found!");
     drivers::serial::write("PSF Font not found!");

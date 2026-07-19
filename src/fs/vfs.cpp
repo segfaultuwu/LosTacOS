@@ -3,6 +3,7 @@
 #include "LTOS/fs/tarfs.hpp"
 #include "LTOS/lib/kprintf.h"
 #include "LTOS/mm/heap.hpp"
+#include "LTOS/state.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -46,6 +47,7 @@ void init() {
 
   current_dir = root;
   fs::devfs::init();
+  state::vfs_initialized = true;
 }
 
 Node *create_node(const char *name, bool directory, Node *parent) {
@@ -112,68 +114,69 @@ static Node *ensure_dir(Node *parent, const char *name) {
   return create_node(name, true, parent);
 }
 
-Node *create_dir_path(const char *path) {
-  if (!path)
-    return nullptr;
-
-  Node *dir = root;
-
-  char part[128];
-  size_t idx = 0;
-
-  for (size_t i = 0;; i++) {
-    if (path[i] == '/' || path[i] == 0) {
-      part[idx] = 0;
-
-      if (idx > 0) {
-        dir = ensure_dir(dir, part);
-      }
-
-      idx = 0;
-
-      if (path[i] == 0)
-        break;
-
-    } else {
-      part[idx++] = path[i];
-    }
-  }
-
-  return dir;
-}
-
 Node *create_file_path(const char *path) {
-  if (!path)
-    return nullptr;
-
   Node *dir = root;
 
+  const char *p = path;
+
   char part[128];
-  size_t idx = 0;
 
-  size_t len = 0;
-  while (path[len])
-    len++;
+  while (*p) {
 
-  for (size_t i = 0; i <= len; i++) {
-    if (path[i] == '/' || path[i] == 0) {
-      part[idx] = 0;
+    size_t i = 0;
 
-      if (path[i] == 0) {
-        return create_node(part, false, dir);
-      }
-
-      if (idx > 0) {
-        dir = ensure_dir(dir, part);
-      }
-
-      idx = 0;
-    } else {
-      part[idx++] = path[i];
+    while (*p && *p != '/') {
+      part[i++] = *p++;
     }
+
+    part[i] = 0;
+
+    if (*p == '/')
+      p++;
+
+    if (!*p) {
+      return create_node(part, false, dir);
+    }
+
+    Node *next = find_in(dir, part);
+
+    if (!next)
+      next = create_node(part, true, dir);
+
+    dir = next;
   }
 
   return nullptr;
+}
+
+Node *create_dir_path(const char *path) {
+  Node *dir = root;
+
+  const char *p = path;
+  char part[128];
+
+  while (*p) {
+
+    size_t i = 0;
+
+    while (*p && *p != '/') {
+      part[i++] = *p++;
+    }
+
+    part[i] = 0;
+
+    if (*p)
+      p++;
+
+    Node *next = find_in(dir, part);
+
+    if (!next)
+      next = create_node(part, true, dir);
+
+    dir = next;
+  }
+
+  return dir;
 }
 
 char *get_name(Node *node) {

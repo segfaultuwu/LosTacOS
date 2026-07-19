@@ -99,38 +99,71 @@ void mount_vfs() {
       break;
 
     size_t size = octal_to_int(hdr->size, sizeof(hdr->size));
+    size_t blocks = (size + 511) / 512;
 
-    char *path = hdr->name;
+    // hdr->name (and hdr->prefix) aren't guaranteed to be NUL-terminated if
+    // they use the full field width, so copy them into a scratch buffer we
+    // control. ustar splits paths longer than 100 chars across `prefix` +
+    // `name`; join them back together when prefix is set. Sized generously
+    // (155 + 1 '/' + 100 + 1 NUL = 257) so the join below can never overflow.
+    char path_buf[300];
 
-    path = normalize(path);
+    if (hdr->prefix[0] != '\0') {
+      char prefix[156];
+      char name[101];
 
+      strncpy(prefix, hdr->prefix, sizeof(hdr->prefix));
+      prefix[sizeof(hdr->prefix)] = '\0';
+
+      strncpy(name, hdr->name, sizeof(hdr->name));
+      name[sizeof(hdr->name)] = '\0';
+
+      size_t plen = strlen(prefix);
+      strncpy(path_buf, prefix, plen);
+      path_buf[plen] = '/';
+      strncpy(path_buf + plen + 1, name, strlen(name) + 1);
+    } else {
+      strncpy(path_buf, hdr->name, sizeof(hdr->name));
+      path_buf[sizeof(hdr->name)] = '\0';
+    }
+
+    char *path = normalize(path_buf);
+
+    // Strip a trailing slash (tar directory entries are stored as "dir/").
+    size_t plen = strlen(path);
+    if (plen > 0 && path[plen - 1] == '/')
+      path[plen - 1] = '\0';
+
+    bool is_dir = hdr->typeflag == '5';
+
+    // Skip the tar's own root entry ("." / "" once normalized/stripped).
     if (path[0] == '\0') {
-      ptr += 512 + ((size + 511) / 512) * 512;
+      ptr += 512 + blocks * 512;
       continue;
     }
 
-    kprintf("TAR -> VFS %s\n", path);
-
-    if (hdr->typeflag == '5') {
-
+    if (is_dir) {
       fs::vfs::create_dir_path(path);
-
-    } else {
-
-      auto *node = fs::vfs::create_file_path(path);
+    } else if (hdr->typeflag == '0' || hdr->typeflag == '\0') {
+      auto node = fs::vfs::create_file_path(path);
 
       if (node) {
         node->file = (fs::vfs::File *)heap::kmalloc(sizeof(fs::vfs::File));
 
         node->file->private_data = ptr + 512;
         node->file->size = size;
+        node->file->read = nullptr;
+        node->file->write = nullptr;
+
+        kprintf("tarfs: added %s (%lu bytes)\n", path, size);
+      } else {
+        logger::warn("tarfs: failed to add %s", path);
       }
     }
 
-    ptr += 512 + ((size + 511) / 512) * 512;
+    ptr += 512 + blocks * 512;
   }
 }
-
 void list() {
   if (!tar_start)
     return;
