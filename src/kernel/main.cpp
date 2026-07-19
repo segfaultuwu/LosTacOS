@@ -1,7 +1,5 @@
 #include "LTOS/arch/x86_64/paging.hpp"
 #include "LTOS/boot.hpp"
-#include "LTOS/console.hpp"
-#include "LTOS/drivers/framebuffer.hpp"
 #include "LTOS/drivers/psf.hpp"
 #include "LTOS/drivers/serial.hpp"
 #include "LTOS/lib/kprintf.h"
@@ -10,8 +8,7 @@
 #include "LTOS_gen/version.h"
 #include "multiboot.h"
 
-extern int shell_main(uint64_t mbi_phys_addr, struct multiboot_module *mb_out,
-                      int mb_max_count);
+extern int shell_main(uint64_t mbi_phys_addr, struct multiboot_module *mb_out, int mb_max_count);
 
 extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
   if (magic == 0x36d76289) {

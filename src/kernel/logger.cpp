@@ -1,6 +1,6 @@
 #include "LTOS/logger.hpp"
+#include "LTOS/drivers/timer.hpp"
 #include "LTOS/lib/kprintf.h"
-#include "LTOS/timer.hpp"
 
 #include <cstdint>
 #include <stdarg.h>

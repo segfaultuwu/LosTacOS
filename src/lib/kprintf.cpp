@@ -1,7 +1,7 @@
 #include "LTOS/lib/kprintf.h"
-#include "LTOS/console.hpp"
+#include "LTOS/drivers/console.hpp"
+#include "LTOS/drivers/framebuffer.hpp"
 #include "LTOS/drivers/serial.hpp"
-#include "LTOS/fs/vfs.hpp"
 
 #include <stdarg.h>
 #include <stdint.h>
@@ -9,8 +9,6 @@
 #include "LTOS/lib/kprintf.h"
 #include <stdarg.h>
 #include <stdint.h>
-
-static fs::vfs::Node *stdout_tty;
 
 struct SnBuf {
   char *buf;
@@ -39,8 +37,7 @@ static int sn_number_length(uint64_t value, int base) {
   return len;
 }
 
-static void sn_print_number(SnBuf &sb, uint64_t value, int base, int width = 0,
-                            bool zero = false) {
+static void sn_print_number(SnBuf &sb, uint64_t value, int base, int width = 0, bool zero = false) {
   char buffer[32];
   const char *digits = "0123456789abcdef";
   int i = 0;
@@ -62,8 +59,7 @@ static void sn_print_number(SnBuf &sb, uint64_t value, int base, int width = 0,
     sn_putc(sb, buffer[i]);
 }
 
-static void sn_print_string(SnBuf &sb, const char *str, int width = 0,
-                            bool left = false) {
+static void sn_print_string(SnBuf &sb, const char *str, int width = 0, bool left = false) {
   if (!str)
     str = "(null)";
 
@@ -175,7 +171,9 @@ int kvsnprintf(char *buf, size_t size, const char *fmt, va_list args) {
   return (int)sb.pos;
 }
 
-static void print_char(char c) { console::put(c); }
+static void print_char(char c) {
+  console::put(c);
+}
 
 static int number_length(uint64_t value, int base) {
   int len = 1;
@@ -188,8 +186,7 @@ static int number_length(uint64_t value, int base) {
   return len;
 }
 
-static void print_number(uint64_t value, int base, int width = 0,
-                         bool zero = false) {
+static void print_number(uint64_t value, int base, int width = 0, bool zero = false) {
   char buffer[32];
 
   const char *digits = "0123456789abcdef";
@@ -331,6 +328,8 @@ void kprintf(const char *fmt, ...) {
   va_start(args, fmt);
 
   kvprintf(fmt, args);
+
+  framebuffer::swap();
 
   va_end(args);
 }

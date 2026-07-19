@@ -15,7 +15,7 @@ void init();
 void *kmalloc(size_t size);
 void kfree(void *ptr);
 
-constexpr uintptr_t HEAP_START = 0x1000000; // 16MB
-constexpr size_t HEAP_SIZE = 0x100000;      // 2MB
+constexpr uintptr_t HEAP_START = 0x1000000;    // 16MB
+constexpr size_t HEAP_SIZE = 16 * 1024 * 1024; // 16 MiB
 
 } // namespace heap

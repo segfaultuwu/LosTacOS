@@ -95,15 +95,13 @@ template <typename Fn> void for_each_tag(uint64_t mbi_phys_addr, Fn fn) {
   while (tag->type != 0 && (uint8_t *)tag < mbi + total_size) {
     fn(tag);
 
-    tag = (struct multiboot_tag *)((uint8_t *)tag +
-                                   ((tag->size + 7) & ~7)); // align to 8
+    tag = (struct multiboot_tag *)((uint8_t *)tag + ((tag->size + 7) & ~7)); // align to 8
   }
 }
 
 void parse_info(uint64_t mbi_phys_addr);
 
-int list_modules(uint64_t mbi_phys_addr, struct multiboot_module *out,
-                 int max_count);
+int list_modules(uint64_t mbi_phys_addr, struct multiboot_module *out, int max_count);
 
 #ifdef __cplusplus
 }

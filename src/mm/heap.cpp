@@ -1,28 +1,32 @@
 #include "LTOS/mm/heap.hpp"
-#include "LTOS/lib/kprintf.h"
+#include "LTOS/drivers/serial.hpp"
 #include "LTOS/logger.hpp"
-#include "LTOS/timer.hpp"
 
 namespace heap {
 
 static Block *heap_head = nullptr;
-// static uintptr_t current = HEAP_START;
 
-static size_t align(size_t size) { return (size + 7) & ~7; }
+static size_t align(size_t size) {
+  return (size + 15) & ~15;
+}
 
-bool heap_initialized = !(heap_head == nullptr);
+bool heap_initialized = false;
 
 void init() {
+  if (heap_initialized) {
+    logger::warn("Heap already initialized");
+    return;
+  }
+
   heap_head = (Block *)HEAP_START;
 
   heap_head->size = HEAP_SIZE - sizeof(Block);
   heap_head->free = true;
   heap_head->next = nullptr;
-  if (heap_initialized) {
-    logger::warn("Failed to initialize heap");
-    timer::sleep(1000);
-    heap::init();
-  }
+
+  heap_initialized = true;
+
+  drivers::serial::writef("HEAP INIT addr=%lx size=%d\n", (uint64_t)heap_head, heap::HEAP_SIZE);
 }
 
 // deprecated.
@@ -40,6 +44,8 @@ void init() {
 // Should be good enough..?
 void *kmalloc(size_t size) {
   Block *curr = heap_head;
+
+  // drivers::serial::writef("kmalloc request=%u\n", size);
 
   size = align(size);
 

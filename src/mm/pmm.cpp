@@ -25,7 +25,9 @@ static uint8_t bitmap[TOTAL_PAGES / 8];
 static uint64_t total_pages = 0;
 static uint64_t free_pages_count = 0;
 
-static inline void set_bit(size_t bit) { bitmap[bit / 8] |= (1 << (bit % 8)); }
+static inline void set_bit(size_t bit) {
+  bitmap[bit / 8] |= (1 << (bit % 8));
+}
 
 static inline void clear_bit(size_t bit) {
   bitmap[bit / 8] &= ~(1 << (bit % 8));
@@ -110,8 +112,7 @@ void init(uint64_t multiboot_addr) {
   }
 
   reserve_region(0, 0x100000);
-  reserve_region((uint64_t)&_kernel_start,
-                 (uint64_t)&_kernel_end - (uint64_t)&_kernel_start);
+  reserve_region((uint64_t)&_kernel_start, (uint64_t)&_kernel_end - (uint64_t)&_kernel_start);
 }
 
 uintptr_t alloc_page() {
@@ -143,9 +144,13 @@ void free_page(uintptr_t addr) {
 
 // Helpers
 
-uint64_t free_memory() { return free_pages_count * PAGE_SIZE; }
+uint64_t free_memory() {
+  return free_pages_count * PAGE_SIZE;
+}
 
-uint64_t total_memory() { return total_pages * PAGE_SIZE; }
+uint64_t total_memory() {
+  return total_pages * PAGE_SIZE;
+}
 
 uint64_t used_memory() {
   uint64_t total = total_memory();

@@ -1,10 +1,17 @@
 #include "LTOS/drivers/framebuffer.hpp"
-#include "LTOS/arch/x86_64/paging.hpp"
 #include "LTOS/drivers/serial.hpp"
+#include "LTOS/mm/heap.hpp"
 #include "multiboot.h"
 #include <cstdint>
+#include <string.h>
 
 namespace framebuffer {
+
+static uint8_t *frontbuffer;
+static uint8_t *backbuffer;
+static uint32_t fb_size;
+
+static bool swapping = false;
 
 Info info{};
 
@@ -13,25 +20,33 @@ void init(uint64_t addr) {
 
   info.address =
       reinterpret_cast<uint8_t *>(static_cast<uintptr_t>(fb->framebuffer_addr));
+
   info.width = fb->framebuffer_width;
   info.height = fb->framebuffer_height;
   info.pitch = fb->framebuffer_pitch;
   info.bpp = fb->framebuffer_bpp;
 
-  drivers::serial::writef("Framebuffer:\n"
-                          " addr=%lx\n"
-                          " pitch=%u\n"
-                          " width=%u\n"
-                          " height=%u\n"
-                          " bpp=%u\n"
-                          " type=%u\n",
-                          fb->framebuffer_addr, fb->framebuffer_pitch,
-                          fb->framebuffer_width, fb->framebuffer_height,
-                          fb->framebuffer_bpp, fb->framebuffer_type);
+  frontbuffer = info.address;
+
+  fb_size = info.pitch * info.height;
+}
+
+void init_backbuffer() {
+  backbuffer = (uint8_t *)heap::kmalloc(fb_size);
+
+  if (!backbuffer) {
+    drivers::serial::write("FB: backbuffer alloc failed\n");
+    return;
+  }
+
+  memset(backbuffer, 0, fb_size);
+
+  drivers::serial::writef("FB backbuffer=%lx size=%u\n", (uint64_t)backbuffer,
+                          fb_size);
 }
 
 void put_pixel(int x, int y, uint32_t color) {
-  if (!info.address)
+  if (!backbuffer)
     return;
 
   if (x < 0 || y < 0)
@@ -40,7 +55,7 @@ void put_pixel(int x, int y, uint32_t color) {
   if (x >= (int)info.width || y >= (int)info.height)
     return;
 
-  uint8_t *pixel = info.address + y * info.pitch + x * (info.bpp / 8);
+  uint8_t *pixel = backbuffer + y * info.pitch + x * (info.bpp / 8);
 
   switch (info.bpp) {
 
@@ -67,13 +82,28 @@ void put_pixel(int x, int y, uint32_t color) {
   }
 }
 
+uint8_t *get_backbuffer() { return backbuffer; }
+
+void swap() {
+  if (swapping)
+    return;
+
+  swapping = true;
+
+  memcpy(frontbuffer, backbuffer, fb_size);
+
+  swapping = false;
+}
+
 void clear(uint32_t color) {
-  if (!info.address)
+  if (!backbuffer)
     return;
 
   for (uint32_t y = 0; y < info.height; y++) {
+    uint32_t *row = (uint32_t *)(backbuffer + y * info.pitch);
+
     for (uint32_t x = 0; x < info.width; x++) {
-      put_pixel(x, y, color);
+      row[x] = color;
     }
   }
 }

@@ -115,7 +115,9 @@ Node *create_dir(const char *name) {
   return create_node(name, true, current_dir);
 }
 
-char *get_name(Node *node) { return (char *)node->name; }
+char *get_name(Node *node) {
+  return (char *)node->name;
+}
 
 char *get_content(Node *node) {
   if (node->file)
@@ -145,7 +147,9 @@ void set_current(Node *node) {
     current_dir = node;
 }
 
-Node *get_current() { return current_dir; }
+Node *get_current() {
+  return current_dir;
+}
 
 void change_dir(char *path) {
   Node *node = find(path);
@@ -206,7 +210,9 @@ Node *find(const char *path) {
   return node;
 }
 
-Node *get_dev_dir() { return find("/dev"); }
+Node *get_dev_dir() {
+  return find("/dev");
+}
 
 Node *find_in(Node *dir, const char *name) {
   Node *node = dir->children;

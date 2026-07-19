@@ -64,6 +64,17 @@ iso: $(KERNEL)
 version:
 	bash ./tools/genver.sh
 
+check:
+	cppcheck \
+    --enable=all \
+    --inconclusive \
+    --std=c++23 \
+    -I include \
+    src/
+
+format:
+	clang-format -i src/**/*.cpp include/**/*.hpp src/**/*.c include/**/*.h
+
 run: iso
 	qemu-system-x86_64 \
 		-cdrom $(ISO) \

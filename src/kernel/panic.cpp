@@ -1,6 +1,7 @@
 #include "LTOS/panic.hpp"
-#include "LTOS/console.hpp"
+#include "LTOS/drivers/console.hpp"
 #include <string.h>
+
 namespace panic {
 
 void halt(const char *msg) {

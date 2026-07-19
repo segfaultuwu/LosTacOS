@@ -21,8 +21,7 @@ void run_user() {
 
   uint64_t stack_pa = (uint64_t)paging::alloc_page();
 
-  paging::map_page(pml4, 0x800000, stack_pa,
-                   PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
+  paging::map_page(pml4, 0x800000, stack_pa, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
 
   asm volatile("mov %0, %%cr3" ::"r"(pml4));
 

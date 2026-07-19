@@ -10,8 +10,13 @@ void init();
 void write(const char *buf, size_t len);
 
 void put(char c);
+void put_swap(char c);
 
 void set_font(psf::Font *f);
+
+void newline();
+
+void backspace();
 
 void clear();
 

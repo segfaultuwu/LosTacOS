@@ -7,7 +7,9 @@ namespace vmm {
 
 static uint64_t *kernel_pml4 = nullptr;
 
-void init(uint64_t *pml4) { kernel_pml4 = pml4; }
+void init(uint64_t *pml4) {
+  kernel_pml4 = pml4;
+}
 
 void map(uintptr_t virt, uintptr_t phys, uint64_t flags) {
   virt &= ~0xFFF;
@@ -16,7 +18,9 @@ void map(uintptr_t virt, uintptr_t phys, uint64_t flags) {
   paging::map_page(kernel_pml4, virt, phys, flags);
 }
 
-void unmap(uintptr_t virt) { paging::unmap_page(kernel_pml4, virt & ~0xFFF); }
+void unmap(uintptr_t virt) {
+  paging::unmap_page(kernel_pml4, virt & ~0xFFF);
+}
 
 uintptr_t alloc(size_t size, uint64_t flags) {
   size = (size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);

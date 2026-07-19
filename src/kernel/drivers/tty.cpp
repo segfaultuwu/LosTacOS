@@ -1,6 +1,6 @@
 #include "LTOS/drivers/tty.hpp"
 
-#include "LTOS/console.hpp"
+#include "LTOS/drivers/console.hpp"
 #include "LTOS/fs/devfs.hpp"
 
 namespace tty {

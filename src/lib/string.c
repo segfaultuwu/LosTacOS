@@ -1,11 +1,30 @@
 #include "string.h"
+#include <stdint.h>
 
 void *memcpy(void *dest, const void *src, size_t n) {
-  unsigned char *d = dest;
-  const unsigned char *s = src;
+  uint8_t *d = (uint8_t *)dest;
+  const uint8_t *s = (const uint8_t *)src;
 
-  for (size_t i = 0; i < n; i++)
-    d[i] = s[i];
+  while (n && ((uintptr_t)d & 7)) {
+    *d++ = *s++;
+    n--;
+  }
+
+  uint64_t *d64 = (uint64_t *)d;
+  const uint64_t *s64 = (const uint64_t *)s;
+
+  while (n >= 8) {
+    *d64++ = *s64++;
+    n -= 8;
+  }
+
+  d = (uint8_t *)d64;
+  s = (const uint8_t *)s64;
+
+  while (n) {
+    *d++ = *s++;
+    n--;
+  }
 
   return dest;
 }

@@ -14,7 +14,9 @@ size_t col = 0;
 
 uint8_t color = 0x07;
 
-void set_color(uint8_t fg, uint8_t bg) { color = (bg << 4) | (fg & 0x0F); }
+void set_color(uint8_t fg, uint8_t bg) {
+  color = (bg << 4) | (fg & 0x0F);
+}
 
 void clear() {
   for (size_t i = 0; i < VGA_WIDTH * VGA_HEIGHT; i++) {

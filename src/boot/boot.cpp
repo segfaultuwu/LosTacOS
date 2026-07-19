@@ -1,23 +1,25 @@
 #include "LTOS/arch/x86_64/gdt.hpp"
 #include "LTOS/arch/x86_64/idt.hpp"
 #include "LTOS/arch/x86_64/paging.hpp"
-#include "LTOS/console.hpp"
+#include "LTOS/drivers/console.hpp"
 #include "LTOS/drivers/framebuffer.hpp"
 #include "LTOS/drivers/pic.hpp"
 #include "LTOS/drivers/psf.hpp"
 #include "LTOS/drivers/serial.hpp"
+#include "LTOS/drivers/timer.hpp"
 #include "LTOS/drivers/tty.hpp"
 #include "LTOS/fs/vfs.hpp"
 #include "LTOS/logger.hpp"
 #include "LTOS/mm/heap.hpp"
 #include "LTOS/mm/pmm.hpp"
 #include "LTOS/mm/vmm.hpp"
-#include "LTOS/timer.hpp"
-#include "LTOS/vga.hpp"
 #include <cstdint>
+
 namespace boot {
 
 int setup(uint64_t mbi_addr) {
+  asm volatile("cli");
+
   drivers::serial::init();
   drivers::serial::write("Reached boot::setup()!\n");
 
@@ -52,15 +54,13 @@ int setup(uint64_t mbi_addr) {
 
   {
     uint64_t fb_base = (uint64_t)framebuffer::info.address;
-    uint64_t fb_size =
-        (uint64_t)framebuffer::info.pitch * framebuffer::info.height;
+    uint64_t fb_size = (uint64_t)framebuffer::info.pitch * framebuffer::info.height;
 
     uint64_t fb_start = fb_base & ~0xFFFULL;
     uint64_t fb_end = (fb_base + fb_size + 0xFFF) & ~0xFFFULL;
 
     for (uint64_t addr = fb_start; addr < fb_end; addr += 0x1000) {
-      paging::map_page(paging::kernel_pml4, addr, addr,
-                       PAGE_PRESENT | PAGE_WRITABLE);
+      paging::map_page(paging::kernel_pml4, addr, addr, PAGE_PRESENT | PAGE_WRITABLE);
     }
 
     logger::info("Framebuffer mapped");
@@ -69,10 +69,14 @@ int setup(uint64_t mbi_addr) {
   heap::init();
   logger::info("Heap Initialized, size: %d KiB", (heap::HEAP_SIZE / 1024));
 
+  framebuffer::init_backbuffer();
+  logger::info("Framebuffer Initialized");
+
   fs::vfs::init();
   logger::info("VFS Initialized");
 
   tty::init();
+  logger::info("TTY Initialized");
 
   console::init();
   logger::info("Console Initialized");

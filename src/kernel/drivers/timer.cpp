@@ -1,10 +1,10 @@
-#include "LTOS/timer.hpp"
+#include "LTOS/drivers/timer.hpp"
 #include "LTOS/drivers/serial.hpp"
 #include <cstdint>
 
 namespace timer {
 
-static volatile uint64_t counter = 0;
+static uint64_t counter = 0;
 static uint32_t frequency = 100;
 
 void init(uint32_t freq) {

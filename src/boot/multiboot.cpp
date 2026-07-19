@@ -17,11 +17,9 @@ void parse_info(uint64_t mbi_phys_addr) {
       uint32_t end = mod->mod_end;
       uint32_t size = end - start;
       char *name = mod->cmdline;
-      kprintf("Found module: %s | Start: 0x%x | Size: %d bytes\n", name, start,
-              size);
-      drivers::serial::writef(
-          "Found module: %s | Start: 0x%x | Size: %d bytes\n", name, start,
-          size);
+      kprintf("Found module: %s | Start: 0x%x | Size: %d bytes\n", name, start, size);
+      drivers::serial::writef("Found module: %s | Start: 0x%x | Size: %d bytes\n", name, start,
+                              size);
 
       paging::reserve_below(end);
 
@@ -35,8 +33,7 @@ void parse_info(uint64_t mbi_phys_addr) {
   });
 }
 
-int list_modules(uint64_t mbi_phys_addr, struct multiboot_module *out,
-                 int max_count) {
+int list_modules(uint64_t mbi_phys_addr, struct multiboot_module *out, int max_count) {
   int count = 0;
 
   for_each_tag(mbi_phys_addr, [&](struct multiboot_tag *tag) {

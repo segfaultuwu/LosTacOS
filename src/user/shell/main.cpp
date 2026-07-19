@@ -1,9 +1,9 @@
-#include "LTOS/console.hpp"
+#include "LTOS/drivers/console.hpp"
 #include "LTOS/drivers/keyboard.hpp"
+#include "LTOS/drivers/timer.hpp"
 #include "LTOS/fs/vfs.hpp"
 #include "LTOS/lib/kprintf.h"
 #include "LTOS/mm/pmm.hpp"
-#include "LTOS/timer.hpp"
 
 #include "multiboot.h"
 #include "string.h"
