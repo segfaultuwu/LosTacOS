@@ -40,6 +40,32 @@ irq0:
 
     iretq
 
+    global irq1_handler
+
+    extern keyboard_irq
+
+
+irq1_handler:
+
+    push rax
+    push rbx
+    push rcx
+    push rdx
+
+    call keyboard_irq
+
+    pop rdx
+    pop rcx
+    pop rbx
+    pop rax
+
+
+    mov al, 0x20
+    out 0x20, al
+
+
+    iretq
+
 extern unhandled_interrupt
 
 ; Stack layout when isr_stub_common runs, for EVERY vector (thanks to the

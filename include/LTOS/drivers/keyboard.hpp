@@ -13,4 +13,9 @@ char event_to_ascii(KeyEvent event);
 char getchar();
 char *getstring();
 
+bool queue_empty();
+KeyEvent pop();
+
+void irq_handler();
+
 } // namespace drivers::keyboard

@@ -1,6 +1,7 @@
 #include "LTOS/drivers/keyboard.hpp"
 #include "LTOS/drivers/console.hpp"
 #include "LTOS/drivers/serial.hpp"
+#include <cstdint>
 
 namespace drivers::keyboard {
 
@@ -11,6 +12,13 @@ constexpr uint8_t STATUS_OUTPUT_FULL = 0x01;
 
 static bool shift = false;
 static bool caps = false;
+
+constexpr size_t QUEUE_SIZE = 128;
+
+static KeyEvent queue[QUEUE_SIZE];
+
+static volatile uint32_t queue_read = 0;
+static volatile uint32_t queue_write = 0;
 
 static KeyCode scancode_to_key(uint8_t sc) {
 
@@ -161,43 +169,35 @@ char key_to_ascii(KeyCode key) {
 }
 
 KeyEvent get_event() {
-
-  while (!(drivers::serial::inb(KBD_STATUS) & STATUS_OUTPUT_FULL))
+  while (queue_empty())
     ;
 
-  uint8_t sc = drivers::serial::inb(KBD_DATA);
+  return pop();
+}
 
-  bool released = sc & 0x80;
+static void push_event(KeyEvent e) {
+  uint32_t next = (queue_write + 1) % QUEUE_SIZE;
 
-  if (released) {
+  if (next == queue_read)
+    return; // full
 
-    sc &= 0x7f;
+  queue[queue_write] = e;
+  queue_write = next;
+}
 
-    if (sc == 0x2A || sc == 0x36)
-      shift = false;
+bool queue_empty() {
+  return queue_read == queue_write;
+}
 
-    return {.key = scancode_to_key(sc),
-            .pressed = false,
-            .shift = shift,
-            .ctrl = false,
-            .alt = false,
-            .scancode = sc};
-  }
+KeyEvent pop() {
+  if (queue_empty())
+    return {.key = KEY_NONE, .pressed = false};
 
-  KeyCode key = scancode_to_key(sc);
+  KeyEvent e = queue[queue_read];
 
-  if (key == KEY_LEFT_SHIFT || key == KEY_RIGHT_SHIFT)
-    shift = true;
+  queue_read = (queue_read + 1) % QUEUE_SIZE;
 
-  if (key == KEY_CAPS_LOCK)
-    caps = !caps;
-
-  return {.key = key,
-          .pressed = true,
-          .shift = shift,
-          .ctrl = false,
-          .alt = false,
-          .scancode = sc};
+  return e;
 }
 
 char getchar() {
@@ -250,6 +250,39 @@ char *getstring() {
   buffer[index] = 0;
 
   return buffer;
+}
+
+void irq_handler() {
+  uint8_t sc = drivers::serial::inb(KBD_DATA);
+
+  bool released = sc & 0x80;
+
+  if (released) {
+    sc &= 0x7f;
+
+    if (sc == 0x2A || sc == 0x36)
+      shift = false;
+
+    push_event({.key = scancode_to_key(sc),
+                .pressed = false,
+                .shift = shift,
+                .ctrl = false,
+                .alt = false,
+                .scancode = sc});
+
+    return;
+  }
+
+  KeyCode key = scancode_to_key(sc);
+
+  if (key == KEY_LEFT_SHIFT || key == KEY_RIGHT_SHIFT)
+    shift = true;
+
+  if (key == KEY_CAPS_LOCK)
+    caps = !caps;
+
+  push_event(
+      {.key = key, .pressed = true, .shift = shift, .ctrl = false, .alt = false, .scancode = sc});
 }
 
 } // namespace drivers::keyboard

@@ -12,7 +12,9 @@ namespace drivers::pic {
 #define PIC2_COMMAND PIC2
 #define PIC2_DATA (PIC2 + 1)
 
-void io_wait() { drivers::serial::outb(0x80, 0); }
+void io_wait() {
+  drivers::serial::outb(0x80, 0);
+}
 
 void init() {
   // ICW1
@@ -48,6 +50,23 @@ void init() {
 
   // disable slave
   drivers::serial::outb(PIC2_DATA, 0xFF);
+}
+
+void enable_irq(uint8_t irq) {
+  uint16_t port;
+
+  if (irq < 8)
+    port = 0x21;
+  else {
+    port = 0xA1;
+    irq -= 8;
+  }
+
+  uint8_t mask = drivers::serial::inb(port);
+
+  mask &= ~(1 << irq);
+
+  drivers::serial::outb(port, mask);
 }
 
 void eoi(uint8_t irq) {

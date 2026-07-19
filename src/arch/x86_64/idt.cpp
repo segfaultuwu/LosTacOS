@@ -1,4 +1,5 @@
 #include "LTOS/arch/x86_64/idt.hpp"
+#include "LTOS/drivers/pic.hpp"
 #include <cstdint>
 
 namespace idt {
@@ -51,6 +52,10 @@ void init() {
   }
   set_gate(0, (uint64_t)isr0);
   set_gate(32, (uint64_t)irq0);
+
+  // keyboard
+  set_gate(33, (uint64_t)irq1_handler);
+  drivers::pic::enable_irq(1);
 
   idtr.limit = sizeof(idt) - 1;
 
