@@ -1,7 +1,6 @@
 #include "LTOS/mm/pmm.hpp"
 #include "LTOS/kernel.hpp"
 #include "LTOS/lib/kprintf.h"
-#include "LTOS/logger.hpp"
 
 #include <cstdint>
 #include <multiboot.h>
