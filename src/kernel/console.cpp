@@ -155,6 +155,10 @@ void put(char c) {
     return;
   }
 
+  if (c == '\t') {
+    cursor_x += 2;
+  }
+
   if (escape) {
 
     if (ansi_pos < sizeof(ansi) - 1)
