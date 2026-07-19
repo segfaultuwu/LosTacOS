@@ -1,32 +1,21 @@
 BITS 64
 
-; Syscall numbers - must match include/LTOS/syscall.hpp
-SYS_WRITE equ 1
-SYS_EXIT  equ 3
-
-; File descriptors
-STDOUT equ 1
-
-section .text
 global _start
 
+section .text
+
 _start:
-    ; Write message to stdout
-    mov rax, SYS_WRITE
-    mov rbx, STDOUT
-    mov rcx, msg
-    mov rdx, msg_len
+    mov rax,1
+    mov rbx,1
+    mov rcx,msg
+    mov rdx,5
     int 0x80
 
-    ; Exit
-    mov rax, SYS_EXIT
-    xor rbx, rbx        ; exit code 0
-    int 0x80
+.loop:
+    jmp .loop
 
-    ; Should never reach here, but just in case
-.hang:
-    jmp .hang
 
 section .data
-msg: db "Hello from /bin/hello!", 10
-msg_len equ $ - msg
+
+msg:
+    db "HELLO",10

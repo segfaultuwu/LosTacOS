@@ -9,10 +9,6 @@
 
 namespace {
 
-// Minimal per-kernel fd table. This kernel doesn't have per-process address
-// spaces / fd tables yet (all "tasks" share the kernel's address space), so a
-// single global table is enough for now. fd 0/1/2 are reserved for
-// stdin/stdout/stderr and never appear in this table.
 constexpr int MAX_FDS = 32;
 fs::vfs::Node *fd_table[MAX_FDS] = {nullptr};
 

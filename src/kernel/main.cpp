@@ -1,107 +1,188 @@
+#include "LTOS/arch/x86_64/gdt.hpp"
+#include "LTOS/arch/x86_64/idt.hpp"
 #include "LTOS/arch/x86_64/paging.hpp"
-#include "LTOS/boot.hpp"
+
+#include "LTOS/drivers/console.hpp"
+#include "LTOS/drivers/framebuffer.hpp"
+#include "LTOS/drivers/pic.hpp"
 #include "LTOS/drivers/psf.hpp"
+#include "LTOS/drivers/serial.hpp"
+#include "LTOS/drivers/timer.hpp"
+#include "LTOS/drivers/tty.hpp"
+
 #include "LTOS/fs/tarfs.hpp"
 #include "LTOS/fs/vfs.hpp"
+
 #include "LTOS/lib/kprintf.h"
 #include "LTOS/logger.hpp"
-#include "LTOS/panic.hpp"
+
+#include "LTOS/mm/heap.hpp"
+#include "LTOS/mm/pmm.hpp"
+#include "LTOS/mm/vmm.hpp"
+
 #include "LTOS/sched/scheduler.hpp"
+#include "LTOS/state.hpp"
+
+#include "LTOS/panic.hpp"
+
 #include "LTOS_gen/version.h"
 #include "multiboot.h"
+
 #include <cstdint>
 
-// void test_task1() {
-//   while (true) {
-//     logger::info("1");
-//     sched::yield();
-//   }
-// }
-
-// void test_task2() {
-//   while (true) {
-//     logger::info("2");
-//     sched::yield();
-//   }
-// }
+bool state::vfs_initialized = false;
 
 extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
-  fs::vfs::init();
+
+  asm volatile("cli");
+
+  //
+  // Serial
+  //
+  drivers::serial::init();
+  drivers::serial::write("Reached kernel_main()!\n");
+
+  //
+  // Multiboot modules
+  //
   if (magic == 0x36d76289) {
+
     uint32_t mbi_total_size = *(uint32_t *)mbi_addr;
+
     paging::reserve_below(mbi_addr + mbi_total_size);
-  }
 
-  struct multiboot_module mods[8];
-
-  if (magic == 0x36d76289) {
     multiboot2::parse_info(mbi_addr);
+
     psf::find_font(mbi_addr);
+
   } else {
     kprintf("Invalid multiboot2 magic!\n");
   }
 
-  fs::tarfs::mount_vfs();
-  logger::info("VFS Initialized");
-  int setup_result = boot::setup(mbi_addr);
+  //
+  // CPU setup
+  //
+  drivers::pic::init();
+  timer::init(250);
 
-  if (setup_result != 0) {
-    panic::halt("boot::setup() failed");
+  logger::info("PIC, PIT Initialized");
+
+  gdt::init();
+  logger::info("GDT Initialized");
+
+  idt::init();
+  logger::info("IDT Initialized");
+
+  //
+  // Memory
+  //
+  pmm::init(mbi_addr);
+  logger::info("PMM Initialized");
+
+  vmm::init(paging::kernel_pml4);
+  logger::info("VMM Initialized");
+
+  paging::init();
+  logger::info("Paging Initialized");
+
+  paging::setup_kernel_identity();
+  paging::enable_paging();
+
+  logger::info("Paging Enabled");
+
+  //
+  // Framebuffer mapping
+  //
+  {
+    uint64_t fb_base = (uint64_t)framebuffer::info.address;
+    uint64_t fb_size = (uint64_t)framebuffer::info.pitch * framebuffer::info.height;
+
+    uint64_t fb_start = fb_base & ~0xFFFULL;
+    uint64_t fb_end = (fb_base + fb_size + 0xFFF) & ~0xFFFULL;
+
+    for (uint64_t addr = fb_start; addr < fb_end; addr += 0x1000) {
+
+      paging::map_page(paging::kernel_pml4, addr, addr, PAGE_PRESENT | PAGE_WRITABLE);
+    }
+
+    logger::info("Framebuffer mapped");
   }
 
-  // Multiboot debug shit
-  // kprintf("magic=%x mbi=%x\n", magic, mbi_addr);
+  //
+  // Heap
+  //
+  heap::init();
 
-  // module declarations
-  logger::info("LosTacOS v%s booted\n", LTOS_VERSION);
-  /* Idt testing shit
-   *
-   * logger::info("Trying to divide by 0..");
-   * volatile int a = 1;
-   * volatile int b = 0;
-   * volatile int tmp = a / b;
-   * kprintf("result: %d", tmp);
-   *
-   * Timer testing shit
-   *
-   * while (true) {
-   *   if (timer::ticks() % 100 == 0)
-   *     logger::info("1 second");
-   *
-   *   asm volatile("hlt");
-   * }
+  logger::info("Heap Initialized, size: %d KiB", heap::HEAP_SIZE / 1024);
 
-    while (true) {
-      logger::info("test");
-      timer::sleep(1000);
-    }
-   */
+  //
+  // VFS
+  //
+  fs::vfs::init();
 
+  logger::info("VFS Initialized");
+
+  //
+  // TARFS
+  //
+  fs::tarfs::mount_vfs();
+
+  //
+  // Drivers
+  //
+  framebuffer::init_backbuffer();
+
+  logger::info("Framebuffer Initialized");
+
+  tty::init();
+
+  logger::info("TTY Initialized");
+
+  console::init();
+
+  logger::info("Console Initialized");
+
+  //
+  // Scheduler
+  //
+  sched::init();
+
+  logger::info("Scheduler initialized");
+
+  logger::info("LosTacOS v%s booted", LTOS_VERSION);
+  asm volatile("sti");
+  //
+  // Tests
+  //
   logger::info("Starting tests..");
 
-  // Heap test
   int *test1 = new int;
+
   *test1 = 2137;
+
   logger::test("Heap: test1 = %d", *test1);
 
   kprintf("ROOT:\n");
+
   fs::vfs::list_dir(fs::vfs::root);
 
   auto bin = fs::vfs::find("/bin");
+
   auto hello = fs::vfs::find("/bin/hello");
 
   kprintf("bin=%x\n", (uint64_t)bin);
-  kprintf("hello=%x\n", (uint64_t)hello);
-  sched::exec("/bin/hello");
 
-  // logger::info("Creating task1");
-  // sched::create(test_task1);
-  // logger::info("Creating task2");
-  // sched::create(test_task2);
+  kprintf("hello=%x\n", (uint64_t)hello);
+
+  if (!hello) {
+    logger::error("ELF: /bin/hello not found");
+  } else {
+    sched::exec("/bin/hello");
+  }
 
   while (true) {
     asm volatile("hlt");
   }
 
-  panic::halt("Should not exit the main loop.");
+  panic::halt("kernel_main returned");
 }

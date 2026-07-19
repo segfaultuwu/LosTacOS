@@ -57,13 +57,13 @@ void init() {
   set_gate(33, (uint64_t)irq1_handler);
   set_gate(128, (uint64_t)isr128, 3); // int 0x80 syscall gate, callable from ring 3
 
-  drivers::pic::enable_irq(1);
-
   idtr.limit = sizeof(idt) - 1;
-
   idtr.base = (uint64_t)&idt;
 
   lidt(&idtr);
+
+  drivers::pic::enable_irq(0);
+  drivers::pic::enable_irq(1);
 }
 
 } // namespace idt

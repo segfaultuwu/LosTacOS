@@ -1,5 +1,6 @@
 #include "LTOS/drivers/timer.hpp"
 #include "LTOS/drivers/serial.hpp"
+#include "LTOS/logger.hpp"
 #include <cstdint>
 
 namespace timer {
@@ -8,6 +9,8 @@ static uint64_t counter = 0;
 static uint32_t frequency = 100;
 
 void init(uint32_t freq) {
+  logger::info("PIT start");
+
   uint32_t divisor = 1193182 / freq;
 
   drivers::serial::outb(0x43, 0x36);

@@ -27,6 +27,7 @@ static size_t octal_to_int(const char *str, size_t len) {
 }
 
 void mount(void *address, size_t size) {
+  kprintf("TARFS MOUNT root=%p\n", fs::vfs::root);
   tar_start = (uint8_t *)address;
   tar_size = size;
 
@@ -141,6 +142,8 @@ void mount_vfs() {
       ptr += 512 + blocks * 512;
       continue;
     }
+
+    kprintf("tarfs adding: '%s'\n", path);
 
     if (is_dir) {
       fs::vfs::create_dir_path(path);

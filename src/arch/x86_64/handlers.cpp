@@ -1,5 +1,6 @@
 #include "LTOS/drivers/keyboard.hpp"
 #include "LTOS/drivers/pic.hpp"
+#include "LTOS/drivers/serial.hpp"
 #include "LTOS/drivers/timer.hpp"
 #include "LTOS/logger.hpp"
 #include "LTOS/sched/scheduler.hpp"
@@ -8,7 +9,7 @@ extern "C" sched::Registers *timer_irq(sched::Registers *regs) {
   static uint64_t count = 0;
 
   if (++count % 100 == 0)
-    logger::info("IRQ0");
+    drivers::serial::writef("IRQ0");
 
   timer::tick();
 

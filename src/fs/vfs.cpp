@@ -35,6 +35,8 @@ static char *strdup(const char *s) {
 void init() {
   root = (Node *)heap::kmalloc(sizeof(Node));
 
+  kprintf("VFS INIT CALLED root=%p\n", root);
+
   root->name = strdup("/");
   root->directory = true;
   root->type = VFS_DIR;
@@ -115,9 +117,15 @@ static Node *ensure_dir(Node *parent, const char *name) {
 }
 
 Node *create_file_path(const char *path) {
+  if (!path || !root)
+    return nullptr;
+
   Node *dir = root;
 
   const char *p = path;
+
+  while (*p == '/')
+    p++;
 
   char part[128];
 
@@ -126,22 +134,38 @@ Node *create_file_path(const char *path) {
     size_t i = 0;
 
     while (*p && *p != '/') {
-      part[i++] = *p++;
+      if (i < sizeof(part) - 1)
+        part[i++] = *p;
+
+      p++;
     }
 
     part[i] = 0;
 
-    if (*p == '/')
+    while (*p == '/')
       p++;
 
-    if (!*p) {
+    if (i == 0)
+      continue;
+
+    if (*p == 0) {
+
+      Node *existing = find_in(dir, part);
+
+      if (existing)
+        return existing;
+
       return create_node(part, false, dir);
     }
 
     Node *next = find_in(dir, part);
 
-    if (!next)
+    if (!next) {
       next = create_node(part, true, dir);
+    } else if (!next->directory) {
+      kprintf("VFS: %s is not directory\n", part);
+      return nullptr;
+    }
 
     dir = next;
   }

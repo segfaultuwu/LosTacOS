@@ -62,6 +62,9 @@ uint64_t load(const char *path) {
 
     memcpy((void *)vaddr, data + ph[i].p_offset, filesz);
 
+    logger::info("AFTER COPY %x %x %x %x %x", ((uint8_t *)vaddr)[0], ((uint8_t *)vaddr)[1],
+                 ((uint8_t *)vaddr)[2], ((uint8_t *)vaddr)[3], ((uint8_t *)vaddr)[4]);
+
     // Zero-fill .bss (the part of the segment beyond the file's content).
     if (memsz > filesz)
       memset((void *)(vaddr + filesz), 0, memsz - filesz);
