@@ -1,85 +1,204 @@
-CXX = g++
-CC  = gcc
-LD = ld
+# =========================
+# Toolchain
+# =========================
+
+CROSS ?=
+
+CXX = $(CROSS)g++
+CC  = $(CROSS)gcc
+LD  = $(CROSS)ld
+AR  = $(CROSS)ar
+
 AS = nasm
 TAR = tar
 
-CXXFLAGS = -std=c++23 -ffreestanding -O2 -Wall -Wextra \
-           -fno-exceptions -fno-rtti \
-           -mno-red-zone -mcmodel=kernel \
-           -fno-pic \
-           -I./include/ \
-           -I./build/generated/ \
-           -fno-builtin \
-           -fno-stack-protector \
-           -mno-sse -mno-sse2 \
-           -mno-mmx -mno-avx \
-           -mgeneral-regs-only
+LTOSCC = ./tools/ltoscc
 
-CFLAGS = -std=c23 -ffreestanding -O2 -Wall -Wextra \
-         -fno-builtin \
-         -Iinclude \
-         -mno-red-zone \
-         -mno-sse -mno-sse2 \
-         -mno-mmx -mno-avx \
-         -mgeneral-regs-only
 
-LDFLAGS = -T linker.ld -nostdlib -z max-page-size=0x1000
+# =========================
+# Paths
+# =========================
 
+BUILD = build
+OBJDIR = $(BUILD)/obj
+
+KERNEL = $(BUILD)/kernel.elf
+ISO = $(BUILD)/LosTacOS-x86_64.iso
+
+ROOTFS = $(BUILD)/rootfs
+TARFS = $(BUILD)/rootfs.tar
+
+
+# =========================
+# Flags
+# =========================
+
+COMMON_FLAGS = \
+	-ffreestanding \
+	-fno-builtin \
+	-fno-stack-protector \
+	-mno-red-zone \
+	-mno-sse \
+	-mno-sse2 \
+	-mno-mmx \
+	-mno-avx \
+	-mgeneral-regs-only
+
+
+DEBUG ?= 0
+
+ifeq ($(DEBUG),1)
+OPT = -O0 -g
+else
+OPT = -O2
+endif
+
+
+CXXFLAGS = \
+	-std=c++23 \
+	$(COMMON_FLAGS) \
+	-fno-exceptions \
+	-fno-rtti \
+	-mcmodel=kernel \
+	-fno-pic \
+	-Iinclude \
+	-I$(BUILD)/generated \
+	$(OPT) \
+	-MMD -MP
+
+
+CFLAGS = \
+	-std=c23 \
+	$(COMMON_FLAGS) \
+	-Iinclude \
+	$(OPT) \
+	-MMD -MP
+
+
+LDFLAGS = \
+	-T linker.ld \
+	-nostdlib \
+	-z max-page-size=0x1000
+
+
+# =========================
+# Sources
+# =========================
 
 SRC_CPP := $(shell find src -name "*.cpp")
 SRC_C   := $(shell find src -name "*.c")
 SRC_ASM := $(shell find src -name "*.asm")
 
-OBJ_CPP := $(SRC_CPP:.cpp=.cpp.o)
-OBJ_C   := $(SRC_C:.c=.c.o)
-OBJ_ASM := $(SRC_ASM:.asm=.asm.o)
 
-OBJ := $(OBJ_CPP) $(OBJ_C) $(OBJ_ASM)
-
-
-KERNEL = build/kernel.elf
-ISO = build/LosTacOS-x86_64.iso
-
-ROOTFS = build/rootfs
-TARFS = build/rootfs.tar
+OBJ_CPP := $(patsubst src/%.cpp,$(OBJDIR)/%.cpp.o,$(SRC_CPP))
+OBJ_C   := $(patsubst src/%.c,$(OBJDIR)/%.c.o,$(SRC_C))
+OBJ_ASM := $(patsubst src/%.asm,$(OBJDIR)/%.asm.o,$(SRC_ASM))
 
 
-.PHONY: all iso clean run user tarfs version
+OBJ = $(OBJ_CPP) $(OBJ_C) $(OBJ_ASM)
+
+DEP = $(OBJ:.o=.d)
+
+
+
+.PHONY: all iso clean run user tarfs libc version
 
 
 all: iso
 
 
-build:
-	mkdir -p build
+
+# =========================
+# Build dir
+# =========================
+
+$(BUILD):
+	mkdir -p $(OBJDIR)
+
 
 
 version:
 	bash ./tools/genver.sh
 
 
-%.cpp.o: %.cpp
+
+# =========================
+# Kernel compile
+# =========================
+
+$(OBJDIR)/%.cpp.o: src/%.cpp
+	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 
-%.c.o: %.c
+$(OBJDIR)/%.c.o: src/%.c
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 
-%.asm.o: %.asm
+$(OBJDIR)/%.asm.o: src/%.asm
+	@mkdir -p $(dir $@)
 	$(AS) -f elf64 $< -o $@
 
 
 
-$(KERNEL): $(OBJ) version | build
+# =========================
+# Kernel
+# =========================
+
+$(KERNEL): $(OBJ) version
 	$(LD) $(LDFLAGS) -o $@ $(OBJ)
 
 
 
-bin/hello: bin/hello.asm
-	$(AS) -f elf64 $< -o bin/hello.o
-	$(LD) -o $@ bin/hello.o
+# =========================
+# User libc
+# =========================
+
+LIBC_ASM := $(shell find libc -name "*.asm")
+LIBC_C   := $(shell find libc -name "*.c")
+
+LIBC_OBJ := $(LIBC_ASM:.asm=.o) $(LIBC_C:.c=.o)
+
+
+
+%.o: %.asm
+	$(AS) -f elf64 $< -o $@
+
+libc/%.o: libc/%.c
+	$(CC) \
+		-std=c23 \
+		-ffreestanding \
+		-fno-builtin \
+		-fno-stack-protector \
+		-mno-red-zone \
+		-mgeneral-regs-only \
+		-Ilibc/include \
+		-c $< \
+		-o $@
+
+
+libc: $(LIBC_OBJ)
+
+	mkdir -p $(ROOTFS)/usr/lib
+
+	$(AR) rcs \
+	$(ROOTFS)/usr/lib/libc.a \
+	$(LIBC_OBJ)
+
+	mkdir -p $(ROOTFS)/lib
+
+	cp libc/src/crt0.o \
+	$(ROOTFS)/lib/
+
+
+
+# =========================
+# User programs
+# =========================
+
+bin/hello: bin/hello.c libc
+	$(LTOSCC) $< -o $@
 
 
 
@@ -87,60 +206,107 @@ user: bin/hello
 
 
 
-tarfs: user
+# =========================
+# RootFS
+# =========================
+
+rootfs_dirs:
 	rm -rf $(ROOTFS)
 
-	mkdir -p $(ROOTFS)/usr/bin
-	mkdir -p $(ROOTFS)/usr/lib
-	mkdir -p $(ROOTFS)/dev
-	mkdir -p $(ROOTFS)/proc
-	mkdir -p $(ROOTFS)/sys
-	mkdir -p $(ROOTFS)/tmp
-	mkdir -p $(ROOTFS)/bin
-
-	cp bin/hello $(ROOTFS)/bin/hello
-
-	$(TAR) --format=ustar \
-		-cf $(TARFS) \
-		-C $(ROOTFS) .
+	mkdir -p \
+	$(ROOTFS)/bin \
+	$(ROOTFS)/lib \
+	$(ROOTFS)/usr/include \
+	$(ROOTFS)/usr/lib \
+	$(ROOTFS)/dev \
+	$(ROOTFS)/proc \
+	$(ROOTFS)/sys \
+	$(ROOTFS)/tmp
 
 
+
+headers: rootfs_dirs
+	cp -r libc/include/* \
+	$(ROOTFS)/usr/include/
+
+
+
+tarfs: headers libc user
+
+	cp bin/hello \
+	$(ROOTFS)/bin/init
+
+
+	$(TAR) \
+	--format=ustar \
+	-cf $(TARFS) \
+	-C $(ROOTFS) .
+
+
+
+# =========================
+# ISO
+# =========================
 
 iso: $(KERNEL) tarfs
 
-	rm -rf build/isodir
+	rm -rf $(BUILD)/isodir
 
-	mkdir -p build/isodir/boot/grub
-
-	cp $(KERNEL) build/isodir/boot/kernel.elf
-	cp $(TARFS) build/isodir/boot/rootfs.tar
-	cp assets/font.psf build/isodir/boot/font.psf
+	mkdir -p \
+	$(BUILD)/isodir/boot/grub
 
 
-	echo 'set timeout=0' > build/isodir/boot/grub/grub.cfg
-	echo 'set default=0' >> build/isodir/boot/grub/grub.cfg
-	echo 'menuentry "LosTacOS" {' >> build/isodir/boot/grub/grub.cfg
-	echo '  multiboot2 /boot/kernel.elf' >> build/isodir/boot/grub/grub.cfg
-	echo '  module2 /boot/font.psf font.psf' >> build/isodir/boot/grub/grub.cfg
-	echo '  module2 /boot/rootfs.tar rootfs.tar' >> build/isodir/boot/grub/grub.cfg
-	echo '  boot' >> build/isodir/boot/grub/grub.cfg
-	echo '}' >> build/isodir/boot/grub/grub.cfg
+	cp $(KERNEL) \
+	$(BUILD)/isodir/boot/kernel.elf
 
 
-	grub-mkrescue -o $(ISO) build/isodir
+	cp $(TARFS) \
+	$(BUILD)/isodir/boot/rootfs.tar
 
 
+	cp assets/font.psf \
+	$(BUILD)/isodir/boot/font.psf
+
+
+	cp cfg/grub.cfg \
+	$(BUILD)/isodir/boot/grub/grub.cfg
+
+
+	grub-mkrescue \
+	-o $(ISO) \
+	$(BUILD)/isodir
+
+
+
+# =========================
+# Run
+# =========================
 
 run: iso
 	qemu-system-x86_64 \
-		-cdrom $(ISO) \
-		-serial stdio \
-		-no-reboot \
-		-no-shutdown
+	-cdrom $(ISO) \
+	-serial stdio \
+	-no-reboot \
+	-no-shutdown
 
 
+
+debug: iso
+	qemu-system-x86_64 \
+	-cdrom $(ISO) \
+	-serial stdio \
+	-s -S
+
+
+
+# =========================
+# Clean
+# =========================
 
 clean:
-	rm -rf build
-	rm -f $(OBJ_CPP) $(OBJ_C) $(OBJ_ASM)
-	rm -f bin/hello bin/hello.o
+	rm -rf $(BUILD)
+	rm -f bin/hello
+	rm -f $(LIBC_OBJ)
+
+
+-include $(DEP)

@@ -2,6 +2,7 @@
 #include "LTOS/drivers/framebuffer.hpp"
 #include "LTOS/kernel.hpp"
 #include "LTOS/logger.hpp"
+#include "LTOS/mm/heap.hpp"
 
 using page_t = uint64_t;
 
@@ -15,6 +16,61 @@ static uint64_t reserved_end = 0;
 void reserve_below(uint64_t addr) {
   if (addr > reserved_end)
     reserved_end = addr;
+}
+
+PageTable *PageTable::create() {
+  PageTable *table = (PageTable *)heap::kmalloc(sizeof(PageTable));
+
+  if (!table)
+    return nullptr;
+
+  table->pml4 = create_address_space();
+
+  if (!table->pml4) {
+    heap::kfree(table);
+    return nullptr;
+  }
+
+  table->phys = (uint64_t)table->pml4;
+
+  return table;
+}
+
+bool PageTable::map(uint64_t virt, uint64_t phys, uint64_t flags) {
+  map_page(pml4, virt, phys, flags);
+
+  return true;
+}
+
+bool PageTable::unmap(uint64_t virt) {
+  unmap_page(pml4, virt);
+
+  return true;
+}
+
+void PageTable::activate() {
+  asm volatile("mov %0, %%cr3" : : "r"(phys) : "memory");
+}
+
+uint64_t PageTable::virt_to_phys(uint64_t virt) {
+  uint64_t pml4_i = (virt >> 39) & 0x1FF;
+  uint64_t pdpt_i = (virt >> 30) & 0x1FF;
+  uint64_t pd_i = (virt >> 21) & 0x1FF;
+  uint64_t pt_i = (virt >> 12) & 0x1FF;
+
+  uint64_t *pdpt = (uint64_t *)(pml4[pml4_i] & ~0xFFF);
+  if (!pdpt)
+    return 0;
+
+  uint64_t *pd = (uint64_t *)(pdpt[pdpt_i] & ~0xFFF);
+  if (!pd)
+    return 0;
+
+  uint64_t *pt = (uint64_t *)(pd[pd_i] & ~0xFFF);
+  if (!pt)
+    return 0;
+
+  return pt[pt_i] & ~0xFFF;
 }
 
 void *alloc_page() {

@@ -151,8 +151,6 @@ irq1_handler:
 
     iretq
 
-
-
 ; =====================
 ; SYSCALL (int 0x80)
 ; =====================
@@ -184,23 +182,20 @@ isr128:
     push r14
     push r15
 
-    ; Linux-style int 0x80 convention (see src/libc/src/syscall.c):
-    ;   rax = syscall number, rbx = arg a, rcx = arg b, rdx = arg c
-    ; syscall_handler(num, a, b, c) needs SysV order: rdi, rsi, rdx, rcx
-    ; so stash c (rdx) before rdx gets overwritten.
 
-    mov r10, rdx        ; r10 = c (already saved on stack, free to reuse)
+    ; syscall_handler(num,a,b,c)
+    mov rdi, [rsp+112] ; rax syscall number
+    mov rsi, [rsp+104] ; rbx arg1
+    mov rdx, [rsp+96]  ; rcx arg2
+    mov rcx, [rsp+88]  ; rdx arg3
 
-    mov rdi, rax        ; num
-    mov rsi, rbx        ; a
-    mov rdx, rcx        ; b
-    mov rcx, r10        ; c
 
     call syscall_handler
 
-    ; write the return value into the saved rax slot so the pop below
-    ; restores it into rax for the caller
-    mov [rsp + 14*8], rax
+
+    ; zapisz return do saved rax
+    mov [rsp+112], rax
+
 
     pop r15
     pop r14
@@ -222,9 +217,8 @@ isr128:
     pop rbx
     pop rax
 
+
     iretq
-
-
 
 ; =====================
 ; Exceptions

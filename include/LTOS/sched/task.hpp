@@ -1,8 +1,10 @@
 #pragma once
 
+#include "LTOS/sched/state.hpp"
 #include <stdint.h>
 
 namespace sched {
+struct Process;
 
 struct Registers {
 
@@ -36,8 +38,6 @@ struct Registers {
   uint64_t ss;
 };
 
-enum class State { READY, RUNNING, BLOCKED, DEAD };
-
 struct Task {
 
   uint64_t pid;
@@ -45,6 +45,8 @@ struct Task {
   Registers *regs;
 
   uint8_t *stack;
+
+  Process *process;
 
   State state;
 

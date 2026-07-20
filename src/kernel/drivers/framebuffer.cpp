@@ -1,4 +1,5 @@
 #include "LTOS/drivers/framebuffer.hpp"
+#include "LTOS/drivers/console.hpp"
 #include "LTOS/drivers/serial.hpp"
 #include "LTOS/mm/heap.hpp"
 #include "multiboot.h"
@@ -18,8 +19,7 @@ Info info{};
 void init(uint64_t addr) {
   auto *fb = reinterpret_cast<multiboot_tag_framebuffer_common *>(addr);
 
-  info.address =
-      reinterpret_cast<uint8_t *>(static_cast<uintptr_t>(fb->framebuffer_addr));
+  info.address = reinterpret_cast<uint8_t *>(static_cast<uintptr_t>(fb->framebuffer_addr));
 
   info.width = fb->framebuffer_width;
   info.height = fb->framebuffer_height;
@@ -41,8 +41,7 @@ void init_backbuffer() {
 
   memset(backbuffer, 0, fb_size);
 
-  drivers::serial::writef("FB backbuffer=%lx size=%u\n", (uint64_t)backbuffer,
-                          fb_size);
+  drivers::serial::writef("FB backbuffer=%lx size=%u\n", (uint64_t)backbuffer, fb_size);
 }
 
 void put_pixel(int x, int y, uint32_t color) {
@@ -70,8 +69,8 @@ void put_pixel(int x, int y, uint32_t color) {
     break;
 
   case 16: {
-    uint16_t rgb565 = (((color >> 19) & 0x1f) << 11) |
-                      (((color >> 10) & 0x3f) << 5) | ((color >> 3) & 0x1f);
+    uint16_t rgb565 =
+        (((color >> 19) & 0x1f) << 11) | (((color >> 10) & 0x3f) << 5) | ((color >> 3) & 0x1f);
 
     *(uint16_t *)pixel = rgb565;
     break;
@@ -82,7 +81,9 @@ void put_pixel(int x, int y, uint32_t color) {
   }
 }
 
-uint8_t *get_backbuffer() { return backbuffer; }
+uint8_t *get_backbuffer() {
+  return backbuffer;
+}
 
 void swap() {
   if (swapping)
@@ -108,14 +109,24 @@ void clear(uint32_t color) {
   }
 }
 
-uint32_t get_width() { return info.width; }
+uint32_t get_width() {
+  return info.width;
+}
 
-uint32_t get_height() { return info.height; }
+uint32_t get_height() {
+  return info.height;
+}
 
-uint32_t get_pitch() { return info.pitch; }
+uint32_t get_pitch() {
+  return info.pitch;
+}
 
-uint32_t get_bpp() { return info.bpp; }
+uint32_t get_bpp() {
+  return info.bpp;
+}
 
-uint8_t *get_address() { return info.address; }
+uint8_t *get_address() {
+  return info.address;
+}
 
 } // namespace framebuffer

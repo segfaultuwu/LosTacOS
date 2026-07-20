@@ -8,7 +8,7 @@ _start:
     mov rax,1
     mov rbx,1
     mov rcx,msg
-    mov rdx,5
+    mov rdx,9
     int 0x80
 
 .loop:
@@ -18,4 +18,4 @@ _start:
 section .data
 
 msg:
-    db "HELLO",10
+    db "HELLO ASM",10

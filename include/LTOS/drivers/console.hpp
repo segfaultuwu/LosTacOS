@@ -20,4 +20,7 @@ void backspace();
 
 void clear();
 
+void lock();
+void unlock();
+
 } // namespace console

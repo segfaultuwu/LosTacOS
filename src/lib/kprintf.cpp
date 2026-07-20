@@ -234,6 +234,7 @@ static void print_string(const char *str, int width = 0, bool left = false) {
     for (int i = len; i < width; i++)
       print_char(' ');
   }
+  framebuffer::swap();
 }
 
 void kvprintf(const char *fmt, va_list args) {

@@ -22,6 +22,18 @@ static uint32_t screen_height;
 
 static uint32_t scale = 1;
 
+static volatile bool console_locked = false;
+
+void lock() {
+  while (__atomic_test_and_set(&console_locked, __ATOMIC_ACQUIRE)) {
+    asm volatile("pause");
+  }
+}
+
+void unlock() {
+  __atomic_clear(&console_locked, __ATOMIC_RELEASE);
+}
+
 void clear();
 
 void init() {
@@ -155,10 +167,6 @@ void put(char c) {
     return;
   }
 
-  if (c == '\t') {
-    cursor_x += 2;
-  }
-
   if (escape) {
 
     if (ansi_pos < sizeof(ansi) - 1)
@@ -220,14 +228,23 @@ void backspace() {
 }
 
 void put_swap(char c) {
+  lock();
+
   put(c);
+
   framebuffer::swap();
+
+  unlock();
 }
 
 void write(const char *buf, size_t len) {
-  for (size_t i = 0; i < len; i++) {
+  lock();
+
+  for (size_t i = 0; i < len; i++)
     put(buf[i]);
-  }
+
+  unlock();
+
   framebuffer::swap();
 }
 

@@ -150,7 +150,6 @@ extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
   logger::info("Scheduler initialized");
 
   logger::info("LosTacOS v%s booted", LTOS_VERSION);
-  asm volatile("sti");
   //
   // Tests
   //
@@ -162,23 +161,15 @@ extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
 
   logger::test("Heap: test1 = %d", *test1);
 
-  kprintf("ROOT:\n");
-
-  fs::vfs::list_dir(fs::vfs::root);
-
-  auto bin = fs::vfs::find("/bin");
-
-  auto hello = fs::vfs::find("/bin/hello");
-
-  kprintf("bin=%x\n", (uint64_t)bin);
-
-  kprintf("hello=%x\n", (uint64_t)hello);
+  auto hello = fs::vfs::find("/bin/init");
 
   if (!hello) {
-    logger::error("ELF: /bin/hello not found");
+    logger::error("ELF: /bin/init not found");
   } else {
-    sched::exec("/bin/hello");
+    sched::exec("/bin/init");
   }
+
+  asm volatile("sti");
 
   while (true) {
     asm volatile("hlt");

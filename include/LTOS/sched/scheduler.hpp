@@ -1,12 +1,12 @@
 #pragma once
 
-#include "task.hpp"
+#include "LTOS/sched/task.hpp"
 
 namespace sched {
 
 void init();
 
-void create(void (*entry)());
+void create(uint64_t entry);
 
 Registers *schedule(Registers *current);
 

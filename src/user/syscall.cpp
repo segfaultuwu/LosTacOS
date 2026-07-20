@@ -1,8 +1,11 @@
 #include "LTOS/syscall.hpp"
 #include "LTOS/drivers/console.hpp"
+#include "LTOS/drivers/framebuffer.hpp"
 #include "LTOS/drivers/keyboard.hpp"
+#include "LTOS/drivers/serial.hpp"
 #include "LTOS/fs/vfs.hpp"
 #include "LTOS/lib/kprintf.h"
+#include "LTOS/logger.hpp"
 #include "LTOS/sched/scheduler.hpp"
 #include <cstddef>
 #include <string.h>
@@ -39,6 +42,10 @@ static uint64_t sys_write(uint64_t a, uint64_t b, uint64_t c) {
 
   if (fd == 1 || fd == 2) {
     console::write(buf, len);
+
+    for (size_t i = 0; i < len; i++)
+      drivers::serial::write(buf[i]);
+
     return len;
   }
 
@@ -49,6 +56,9 @@ static uint64_t sys_write(uint64_t a, uint64_t b, uint64_t c) {
 
   if (node->dev && node->dev->write)
     return node->dev->write(buf, len);
+
+  // idk why it does not render without it, it's already in console::write lol
+  framebuffer::swap();
 
   // Writing to regular files through an fd isn't supported yet.
   return (uint64_t)-1;
@@ -80,6 +90,7 @@ static uint64_t sys_read(uint64_t a, uint64_t b, uint64_t c) {
       }
 
       buf[i++] = ch;
+      console::put(ch);
     }
 
     return i;
@@ -144,6 +155,8 @@ static uint64_t sys_exec(uint64_t a) {
 }
 
 uint64_t syscall_handler(uint64_t num, uint64_t a, uint64_t b, uint64_t c) {
+  // kprintf("SYSCALL %lu a=%lx b=%lx c=%lx\n", num, a, b, c);
+
   switch (num) {
 
   case SYS_WRITE:

@@ -1,8 +1,8 @@
 #include "LTOS/sched/scheduler.hpp"
-#include "LTOS/drivers/serial.hpp"
 #include "LTOS/exec/elf.hpp"
 #include "LTOS/logger.hpp"
 #include "LTOS/mm/heap.hpp"
+#include "LTOS/sched/process.hpp"
 #include "LTOS/sched/task.hpp"
 
 #include <cstdint>
@@ -15,15 +15,17 @@ static Task *current_task = nullptr;
 
 static uint64_t pid_counter = 1;
 
-void init() {
-  head = nullptr;
-  current_task = nullptr;
-
-  logger::info("Scheduler initialized");
+static void kernel_idle() {
+  while (true) {
+    asm volatile("hlt");
+  }
 }
 
-static void task_wrapper() {
-  logger::info("task finished");
+static void task_wrapper(void (*entry)()) {
+
+  entry();
+
+  logger::info("task returned");
 
   sched::exit();
 
@@ -31,18 +33,20 @@ static void task_wrapper() {
     asm volatile("hlt");
 }
 
-void create(uint64_t entry) {
+static Task *create_task(void *entry, void *arg) {
 
   Task *task = (Task *)heap::kmalloc(sizeof(Task));
 
   if (!task)
-    return;
+    return nullptr;
+
+  memset(task, 0, sizeof(Task));
 
   task->stack = (uint8_t *)heap::kmalloc(8192);
 
   if (!task->stack) {
     heap::kfree(task);
-    return;
+    return nullptr;
   }
 
   uint64_t stack_top = (uint64_t)task->stack + 8192;
@@ -53,11 +57,17 @@ void create(uint64_t entry) {
 
   memset(r, 0, sizeof(Registers));
 
-  r->rip = entry;
-  r->cs = 0x08;
-  r->rflags = 0x202;
+  r->rip = (uint64_t)entry;
+
+  r->rdi = (uint64_t)arg;
+
   r->rsp = stack_top;
+
+  r->cs = 0x08;
+
   r->ss = 0x10;
+
+  r->rflags = 0x202;
 
   task->pid = pid_counter++;
 
@@ -67,9 +77,9 @@ void create(uint64_t entry) {
 
   task->next = nullptr;
 
-  if (!head)
+  if (!head) {
     head = task;
-  else {
+  } else {
 
     Task *t = head;
 
@@ -79,7 +89,33 @@ void create(uint64_t entry) {
     t->next = task;
   }
 
-  logger::info("created pid=%d rip=%lx rsp=%lx", task->pid, r->rip, r->rsp);
+  return task;
+}
+
+static Task kernel_task;
+
+void init() {
+  head = nullptr;
+
+  kernel_task.pid = 0;
+  kernel_task.regs = nullptr;
+  kernel_task.stack = nullptr;
+  kernel_task.state = State::RUNNING;
+  kernel_task.next = nullptr;
+
+  current_task = &kernel_task;
+
+  logger::info("Scheduler initialized");
+}
+
+void create(uint64_t entry) {
+
+  Task *task = create_task((void *)task_wrapper, (void *)entry);
+
+  if (!task)
+    return;
+
+  // logger::info("created pid=%d entry=%lx", task->pid, entry);
 }
 
 void exec(const char *path) {
@@ -88,7 +124,7 @@ void exec(const char *path) {
 
   if (!entry) {
 
-    logger::error("exec: failed loading %s", path);
+    logger::error("exec failed %s", path);
 
     return;
   }
@@ -98,23 +134,18 @@ void exec(const char *path) {
 
 Registers *schedule(Registers *old) {
 
-  if (current_task) {
-
+  if (current_task)
     current_task->regs = old;
-  }
 
-  if (!head) {
-
+  if (!head)
     return old;
-  }
 
-  Task *next = nullptr;
+  Task *next;
 
-  if (!current_task) {
-
+  if (!current_task)
     next = head;
 
-  } else {
+  else {
 
     next = current_task->next;
 
@@ -122,30 +153,47 @@ Registers *schedule(Registers *old) {
       next = head;
   }
 
-  /*
-      skip dead tasks
-  */
-
   Task *start = next;
 
-  while (next->state == State::DEAD) {
+  do {
+
+    if (next->state != State::DEAD)
+      break;
 
     next = next->next;
 
     if (!next)
       next = head;
 
-    if (next == start)
-      return old;
-  }
+  } while (next != start);
 
   current_task = next;
 
   current_task->state = State::RUNNING;
 
-  // logger::info("switch pid=%d rip=%lx", current_task->pid, current_task->regs->rip);
+  if (current_task->process) {
+    current_task->process->space->activate();
+  }
 
   return current_task->regs;
+}
+
+Task *get_current() {
+  return current_task;
+}
+
+void yield() {
+  asm volatile("int $32");
+}
+
+void exit() {
+  if (!current_task || current_task->pid == 0)
+    return;
+
+  current_task->state = State::DEAD;
+  asm volatile("int $32");
+  while (1)
+    asm volatile("hlt");
 }
 
 void destroy_task(Task *task) {
@@ -157,37 +205,6 @@ void destroy_task(Task *task) {
     heap::kfree(task->stack);
 
   heap::kfree(task);
-}
-
-Task *get_current() {
-
-  return current_task;
-}
-
-void yield() {
-
-  asm volatile("int $32");
-}
-
-void idle() {
-
-  while (true)
-    asm volatile("hlt");
-}
-
-void exit() {
-
-  if (!current_task)
-    return;
-
-  logger::info("task %d exited", current_task->pid);
-
-  current_task->state = State::DEAD;
-
-  asm volatile("int $32");
-
-  while (true)
-    asm volatile("hlt");
 }
 
 } // namespace sched

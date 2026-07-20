@@ -9,15 +9,6 @@ namespace logger {
 
 enum Level { INFO = 1, WARN, ERROR, TEST };
 
-static void lock() {
-  while (__atomic_test_and_set(&logger_lock, __ATOMIC_ACQUIRE))
-    asm volatile("pause");
-}
-
-static void unlock() {
-  __atomic_clear(&logger_lock, __ATOMIC_RELEASE);
-}
-
 void log(Level level, const char *fmt, va_list args) {
   uint64_t sec = timer::get_uptime_ms() / 1000;
   uint64_t frac = timer::get_uptime_ms() % 1000;

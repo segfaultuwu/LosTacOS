@@ -32,7 +32,7 @@ uint64_t load(const char *path) {
     return 0;
   }
 
-  logger::info("ELF entry: %x", hdr->e_entry);
+  // logger::info("ELF entry: %x", hdr->e_entry);
 
   Elf64_Phdr *ph = (Elf64_Phdr *)(data + hdr->e_phoff);
 
@@ -41,7 +41,7 @@ uint64_t load(const char *path) {
     if (ph[i].p_type != PT_LOAD)
       continue;
 
-    logger::info("LOAD %x size %x", ph[i].p_vaddr, ph[i].p_memsz);
+    // logger::info("LOAD %x size %x", ph[i].p_vaddr, ph[i].p_memsz);
 
     uint64_t vaddr = ph[i].p_vaddr;
     uint64_t memsz = ph[i].p_memsz;
@@ -62,8 +62,8 @@ uint64_t load(const char *path) {
 
     memcpy((void *)vaddr, data + ph[i].p_offset, filesz);
 
-    logger::info("AFTER COPY %x %x %x %x %x", ((uint8_t *)vaddr)[0], ((uint8_t *)vaddr)[1],
-                 ((uint8_t *)vaddr)[2], ((uint8_t *)vaddr)[3], ((uint8_t *)vaddr)[4]);
+    // logger::info("AFTER COPY %x %x %x %x %x", ((uint8_t *)vaddr)[0], ((uint8_t *)vaddr)[1],
+    //              ((uint8_t *)vaddr)[2], ((uint8_t *)vaddr)[3], ((uint8_t *)vaddr)[4]);
 
     // Zero-fill .bss (the part of the segment beyond the file's content).
     if (memsz > filesz)

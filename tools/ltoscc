@@ -1,0 +1,19 @@
+#!/bin/bash
+
+set -e
+
+SRC="$1"
+OUT="$3"
+
+clang \
+    --config cfg/clang-ltos.cfg \
+    "$SRC"
+
+ld \
+    -T cfg/user.ld \
+    -nostdlib \
+    -e _start \
+    -o "$OUT" \
+    build/rootfs/lib/crt0.o \
+    /tmp/ltos-program.o \
+    build/rootfs/usr/lib/libc.a
