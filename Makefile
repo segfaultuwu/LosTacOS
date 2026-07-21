@@ -197,12 +197,12 @@ libc: $(LIBC_OBJ)
 # User programs
 # =========================
 
-bin/hello: bin/hello.c libc
+bin/init: bin/init.c libc
 	$(LTOSCC) $< -o $@
 
 
 
-user: bin/hello
+user: bin/init
 
 
 
@@ -233,7 +233,7 @@ headers: rootfs_dirs
 
 tarfs: headers libc user
 
-	cp bin/hello \
+	cp bin/init \
 	$(ROOTFS)/bin/init
 
 
@@ -305,7 +305,7 @@ debug: iso
 
 clean:
 	rm -rf $(BUILD)
-	rm -f bin/hello
+	rm -f bin/init
 	rm -f $(LIBC_OBJ)
 
 
