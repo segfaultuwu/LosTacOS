@@ -14,7 +14,7 @@ LosTacOS is a simple operating system written in C/C++/NASM. It is designed to b
 - **paging** - memory management
 - **heap** - memory management
 - **drivers** - keyboard, mouse, framebuffer, (now deprecated) vga, serial, etc.
-- **shell** - simple shell
+- ~~**shell**~~ - (in progress)
 - **userspace** - (in progress)
 - **AND MORE**!
 
