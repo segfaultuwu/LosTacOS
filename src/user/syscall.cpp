@@ -7,6 +7,7 @@
 #include "LTOS/fs/vfs.hpp"
 #include "LTOS/lib/kprintf.h"
 #include "LTOS/logger.hpp"
+#include "LTOS/mm/heap.hpp"
 #include "LTOS/sched/process.hpp"
 #include "LTOS/sched/scheduler.hpp"
 #include "LTOS/sched/task.hpp"
@@ -247,15 +248,6 @@ static uint64_t sys_fsize(uint64_t a) {
   return node->file ? node->file->size : 0;
 }
 
-// wait() was previously a no-op stub in libc, so the shell's execute()
-// never actually waited for the child it just fork()ed+exec()ed -- it
-// went straight back around its while(1) loop and issued a *new*
-// blocking scanf()/read() while the child might still be running,
-// which is what made the prompt look like it wasn't waiting for input:
-// the parent was already back at the next prompt instead of pausing
-// for the command that was still in flight. Block here (same
-// sti-before-dispatch + hlt pattern sys_read uses) until the target
-// task is gone or marked DEAD.
 static uint64_t sys_wait(uint64_t a) {
   uint64_t pid = a;
 
@@ -269,7 +261,7 @@ static uint64_t sys_wait(uint64_t a) {
   }
 }
 
-uint64_t sys_fork() {
+static uint64_t sys_fork() {
   sched::Task *parent_task = sched::get_current();
 
   if (!parent_task)
@@ -292,6 +284,24 @@ uint64_t sys_fork() {
   sched::add(child->main_thread);
 
   return child->pid;
+}
+
+static uint64_t sys_mmap(size_t size) {
+  void *ptr = heap::kmalloc(size);
+
+  if (!ptr)
+    return 0;
+
+  return (uint64_t)ptr;
+}
+
+static uint64_t sys_munmap(uint64_t ptr) {
+  if (!ptr)
+    return -1;
+
+  heap::kfree((void *)ptr);
+
+  return 0;
 }
 
 uint64_t syscall_handler(uint64_t num, uint64_t a, uint64_t b, uint64_t c) {
@@ -338,6 +348,12 @@ uint64_t syscall_handler(uint64_t num, uint64_t a, uint64_t b, uint64_t c) {
 
   case SYS_WAIT:
     return sys_wait(a);
+
+  case SYS_MMAP:
+    return sys_mmap(a);
+
+  case SYS_MUNMAP:
+    return sys_munmap(a);
 
   default:
     kprintf("syscall: unknown syscall %lu\n", num);

@@ -16,6 +16,8 @@ enum Syscall {
   SYS_LSEEK,
   SYS_FSIZE,
   SYS_WAIT,
+  SYS_MMAP,
+  SYS_MUNMAP,
 };
 
 extern "C" uint64_t syscall_handler(uint64_t num, uint64_t a, uint64_t b, uint64_t c);
