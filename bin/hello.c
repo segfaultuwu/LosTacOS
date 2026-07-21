@@ -1,19 +1,46 @@
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/syscall.h>
+#include <unistd.h>
+
+#define MAX_CMD 128
+
+static void execute(char *cmd) {
+  if (strlen(cmd) == 0)
+    return;
+
+  if (strcmp(cmd, "exit") == 0) {
+    exit(0);
+  }
+
+  int pid = fork();
+
+  if (pid == 0) {
+    exec(cmd);
+
+    printf("sh: command not found: %s\n", cmd);
+
+    exit(1);
+  }
+
+  // parent
+  wait(pid);
+}
 
 int main() {
-  char name[64];
-  int age;
+  char cmd[MAX_CMD];
 
-  puts("Name:");
+  printf("LosTacOS shell\n");
 
-  scanf("%s", name);
+  while (1) {
 
-  puts("Age:");
+    printf("los> ");
 
-  scanf("%d", &age);
+    scanf("%127s", cmd);
 
-  printf("Hello %s age %d\n", name, age);
+    execute(cmd);
+  }
 
   return 0;
 }

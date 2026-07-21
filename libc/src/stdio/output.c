@@ -1,9 +1,6 @@
 #include <stdarg.h>
 #include <stddef.h>
-
-extern long syscall(long num, long a, long b, long c);
-
-#define SYS_WRITE 1
+#include <sys/syscall.h>
 
 static void write_buf(const char *buf, size_t len) {
   syscall(SYS_WRITE, 1, (long)buf, len);

@@ -19,4 +19,8 @@ void yield();
 void idle();
 void exit();
 
+Process *clone(Process *parent);
+
+void add(Task *task);
+
 } // namespace sched

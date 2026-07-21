@@ -1,6 +1,7 @@
 #include "LTOS/sched/scheduler.hpp"
 #include "LTOS/exec/elf.hpp"
 #include "LTOS/logger.hpp"
+#include "LTOS/mm/address_space.hpp"
 #include "LTOS/mm/heap.hpp"
 #include "LTOS/sched/process.hpp"
 #include "LTOS/sched/task.hpp"
@@ -33,7 +34,7 @@ static void task_wrapper(void (*entry)()) {
     asm volatile("hlt");
 }
 
-static Task *create_task(void *entry, void *arg) {
+static Task *create_task(Process *proc, void *entry, void *arg) {
 
   Task *task = (Task *)heap::kmalloc(sizeof(Task));
 
@@ -77,6 +78,8 @@ static Task *create_task(void *entry, void *arg) {
 
   task->next = nullptr;
 
+  task->process = proc;
+
   if (!head) {
     head = task;
   } else {
@@ -92,44 +95,69 @@ static Task *create_task(void *entry, void *arg) {
   return task;
 }
 
+Process *create_process(uint64_t entry) {
+  Process *proc = (Process *)heap::kmalloc(sizeof(Process));
+  if (!proc)
+    return nullptr;
+
+  memset(proc, 0, sizeof(Process));
+
+  proc->pid = pid_counter++;
+
+  proc->space = mm::AddressSpace::create(); // albo clone kernel space
+
+  Task *task = create_task(proc, (void *)task_wrapper, (void *)entry);
+
+  proc->main_thread = task;
+
+  return proc;
+}
+
 static Task kernel_task;
+
+static Process kernel_process;
 
 void init() {
   head = nullptr;
 
+  kernel_process.pid = 0;
+  kernel_process.space = mm::AddressSpace::kernel();
+
   kernel_task.pid = 0;
+  kernel_task.process = &kernel_process;
   kernel_task.regs = nullptr;
   kernel_task.stack = nullptr;
   kernel_task.state = State::RUNNING;
   kernel_task.next = nullptr;
 
   current_task = &kernel_task;
-
-  logger::info("Scheduler initialized");
 }
 
 void create(uint64_t entry) {
-
-  Task *task = create_task((void *)task_wrapper, (void *)entry);
-
-  if (!task)
-    return;
-
-  // logger::info("created pid=%d entry=%lx", task->pid, entry);
+  create_process(entry);
 }
 
 void exec(const char *path) {
+  Process *proc = (Process *)heap::kmalloc(sizeof(Process));
+  if (!proc)
+    return;
 
-  uint64_t entry = elf::load(path);
+  memset(proc, 0, sizeof(Process));
+
+  proc->pid = pid_counter++;
+
+  proc->space = mm::AddressSpace::create();
+
+  uint64_t entry = elf::load(path, proc->space);
 
   if (!entry) {
-
     logger::error("exec failed %s", path);
-
     return;
   }
 
-  create(entry);
+  Task *task = create_task(proc, (void *)task_wrapper, (void *)entry);
+
+  proc->main_thread = task;
 }
 
 Registers *schedule(Registers *old) {
@@ -191,9 +219,60 @@ void exit() {
     return;
 
   current_task->state = State::DEAD;
+
+  if (current_task->process && current_task->process->space) {
+    current_task->process->space->destroy();
+  }
+
   asm volatile("int $32");
+
   while (1)
     asm volatile("hlt");
+}
+
+Process *clone(Process *parent) {
+  if (!parent || !parent->main_thread)
+    return nullptr;
+
+  Process *child = (Process *)heap::kmalloc(sizeof(Process));
+
+  if (!child)
+    return nullptr;
+
+  memcpy(child, parent, sizeof(Process));
+
+  Task *task = create_task(child, (void *)task_wrapper, nullptr);
+
+  if (!task)
+    return nullptr;
+
+  memcpy(task->regs, parent->main_thread->regs, sizeof(Registers));
+
+  // fork() == 0 in child
+  task->regs->rax = 0;
+
+  child->main_thread = task;
+
+  return child;
+}
+
+void add(Task *task) {
+  if (!task)
+    return;
+
+  task->next = nullptr;
+
+  if (!head) {
+    head = task;
+    return;
+  }
+
+  Task *t = head;
+
+  while (t->next)
+    t = t->next;
+
+  t->next = task;
 }
 
 void destroy_task(Task *task) {

@@ -186,6 +186,18 @@ static int number_length(uint64_t value, int base) {
   return len;
 }
 
+int ksnprintf(char *buf, size_t size, const char *fmt, ...) {
+  va_list args;
+
+  va_start(args, fmt);
+
+  int ret = kvsnprintf(buf, size, fmt, args);
+
+  va_end(args);
+
+  return ret;
+}
+
 static void print_number(uint64_t value, int base, int width = 0, bool zero = false) {
   char buffer[32];
 

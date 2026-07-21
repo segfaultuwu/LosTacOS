@@ -4,6 +4,7 @@
 
 #include "LTOS/arch/x86_64/paging.hpp"
 #include "LTOS/fs/vfs.hpp"
+#include "LTOS/mm/address_space.hpp"
 #include "LTOS/sched/state.hpp"
 
 namespace sched {
@@ -18,7 +19,7 @@ struct Process {
 
   Task *main_thread;
 
-  paging::PageTable *space;
+  mm::AddressSpace *space;
 
   fs::vfs::Node *cwd;
 

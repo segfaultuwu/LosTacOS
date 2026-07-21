@@ -10,6 +10,7 @@
 #include "LTOS/drivers/timer.hpp"
 #include "LTOS/drivers/tty.hpp"
 
+#include "LTOS/fs/procfs.hpp"
 #include "LTOS/fs/tarfs.hpp"
 #include "LTOS/fs/vfs.hpp"
 
@@ -121,6 +122,9 @@ extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
   fs::vfs::init();
 
   logger::info("VFS Initialized");
+
+  fs::procfs::init();
+  logger::info("ProcFS Initialized");
 
   //
   // TARFS

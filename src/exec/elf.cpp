@@ -8,7 +8,7 @@
 
 namespace elf {
 
-uint64_t load(const char *path) {
+uint64_t load(const char *path, mm::AddressSpace *space) {
 
   auto node = fs::vfs::find(path);
 

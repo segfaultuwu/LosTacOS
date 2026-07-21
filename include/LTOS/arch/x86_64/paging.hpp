@@ -69,6 +69,10 @@ void reserve_below(uint64_t addr);
 
 uint64_t *create_address_space();
 
+PageTable *clone_kernel_table();
+
+void switch_page_table(PageTable *table);
+
 void map_page(uint64_t *pml4, uint64_t va, uint64_t pa, uint64_t flags);
 
 void unmap_page(uint64_t *pml4, uint64_t va);

@@ -227,4 +227,22 @@ uint64_t *create_address_space() {
   return pml4;
 }
 
+PageTable *clone_kernel_table() {
+  /*
+      Na razie używamy tej samej tablicy.
+      Prawdziwy fork zrobi kopię PML4.
+  */
+
+  return (PageTable *)kernel_pml4;
+}
+
+void switch_page_table(PageTable *table) {
+  if (!table)
+    return;
+
+  uint64_t addr = (uint64_t)table;
+
+  asm volatile("mov %0, %%cr3" : : "r"(addr) : "memory");
+}
+
 } // namespace paging

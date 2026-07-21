@@ -1,18 +1,26 @@
 #include <stdarg.h>
+#include <sys/syscall.h>
 
-extern long syscall(long num, long a, long b, long c);
+static char input_buf[128];
+static int input_pos = 0;
+static int input_len = 0;
 
-#define SYS_READ 2
+static int getchar_internal() {
+  if (input_pos >= input_len) {
+    long r = syscall(SYS_READ, 0, (long)input_buf, sizeof(input_buf));
+
+    if (r <= 0)
+      return -1;
+
+    input_len = r;
+    input_pos = 0;
+  }
+
+  return (unsigned char)input_buf[input_pos++];
+}
 
 int getchar(void) {
-  char c;
-
-  long r = syscall(SYS_READ, 0, (long)&c, 1);
-
-  if (r <= 0)
-    return -1;
-
-  return (unsigned char)c;
+  return getchar_internal();
 }
 
 int scanf(const char *fmt, ...) {
@@ -35,15 +43,16 @@ int scanf(const char *fmt, ...) {
 
       int i = 0;
 
-      char c;
+      int c;
 
-      while (1) {
-        c = getchar();
+      // pomiń spacje i newline
+      do {
+        c = getchar_internal();
+      } while (c == ' ' || c == '\n');
 
-        if (c == '\n' || c == ' ')
-          break;
-
+      while (c != ' ' && c != '\n' && c != -1) {
         buf[i++] = c;
+        c = getchar_internal();
       }
 
       buf[i] = 0;
@@ -57,18 +66,22 @@ int scanf(const char *fmt, ...) {
       int value = 0;
       int sign = 1;
 
-      char c = getchar();
+      int c;
+
+      do {
+        c = getchar_internal();
+      } while (c == ' ' || c == '\n');
 
       if (c == '-') {
         sign = -1;
-        c = getchar();
+        c = getchar_internal();
       }
 
       while (c >= '0' && c <= '9') {
         value *= 10;
         value += c - '0';
 
-        c = getchar();
+        c = getchar_internal();
       }
 
       *out = value * sign;

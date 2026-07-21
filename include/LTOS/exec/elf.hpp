@@ -1,5 +1,6 @@
 #pragma once
 
+#include "LTOS/mm/address_space.hpp"
 #include <stdint.h>
 
 namespace elf {
@@ -45,6 +46,6 @@ struct Elf64_Phdr {
 constexpr uint32_t PT_LOAD = 1;
 
 // Returns the ELF entry point address on success, or 0 on failure.
-uint64_t load(const char *path);
+uint64_t load(const char *path, mm::AddressSpace *space);
 
 } // namespace elf
