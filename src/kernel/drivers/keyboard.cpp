@@ -1,7 +1,11 @@
 #include "LTOS/drivers/keyboard.hpp"
 #include "LTOS/drivers/console.hpp"
 #include "LTOS/drivers/serial.hpp"
+#include "LTOS/lib/kprintf.h"
 #include <cstdint>
+
+char stdin_buffer[256];
+volatile size_t stdin_len = 0;
 
 namespace drivers::keyboard {
 
@@ -418,8 +422,6 @@ char getchar() {
     if (!c)
       continue;
 
-    console::put_swap(c);
-
     return c;
   }
 }
@@ -469,7 +471,6 @@ void irq_handler() {
   // so the best this driver can do without properly parsing it is avoid
   // letting it desync `extended` for the *next* real key.
   static bool extended = false;
-
   if (sc == 0xE0) {
     extended = true;
     return;
@@ -514,6 +515,13 @@ void irq_handler() {
 
   if (key == KEY_CAPS_LOCK)
     caps = !caps;
+
+  char keychar = key_to_ascii(key);
+
+  if (stdin_len < sizeof(stdin_buffer)) {
+    stdin_buffer[stdin_len] = keychar;
+    stdin_len = stdin_len + 1;
+  }
 
   push_event(
       {.key = key, .pressed = true, .shift = shift, .ctrl = ctrl, .alt = alt, .scancode = sc});

@@ -4,7 +4,7 @@ section .text
 
 syscall:
 
-    mov r8, rcx        ; zachowaj c
+    mov r8, rcx        ; keep c
 
     mov rax, rdi       ; syscall number
     mov rbx, rsi       ; arg1

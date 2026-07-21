@@ -2,11 +2,12 @@
 #include "LTOS/panic.hpp"
 #include <cstdint>
 
-extern "C" void divide_error() { panic::halt("Divide by zero"); }
+extern "C" void divide_error() {
+  panic::halt("Divide by zero");
+}
 
-extern "C" void unhandled_interrupt(uint64_t vector, uint64_t addr,
-                                    uint64_t rip) {
-  kprintf("vector=%d\n", vector);
+extern "C" void unhandled_interrupt(uint64_t vector, uint64_t addr, uint64_t rip) {
+  kprintf("vector=%d rip=%x err/addr=%x\n", vector, rip, addr);
 
   switch (vector) {
   case 14:

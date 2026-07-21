@@ -64,56 +64,41 @@ static uint64_t sys_write(uint64_t a, uint64_t b, uint64_t c) {
   return (uint64_t)-1;
 }
 
+extern volatile size_t stdin_len;
+extern char stdin_buffer[256];
+
 static uint64_t sys_read(uint64_t a, uint64_t b, uint64_t c) {
-  int fd = (int)a;
+  int fd = a;
   char *buf = (char *)b;
   size_t len = c;
 
-  if (!buf || len == 0)
-    return 0;
-
   if (fd == 0) {
-    size_t i = 0;
+    size_t n = 0;
 
-    while (i < len) {
-      char ch = drivers::keyboard::getchar();
-
-      if (ch == '\n') {
-        buf[i++] = '\n';
-        break;
-      }
-
-      if (ch == '\b') {
-        if (i)
-          i--;
+    while (n < len) {
+      if (stdin_len == 0)
         continue;
-      }
 
-      buf[i++] = ch;
-      console::put(ch);
+      buf[n++] = stdin_buffer[0];
+
+      for (size_t i = 1; i < stdin_len; i++)
+        stdin_buffer[i - 1] = stdin_buffer[i];
+
+      stdin_len--;
+
+      char echoed = buf[n - 1];
+
+      console::put_swap(echoed);
+      drivers::serial::write(echoed);
+
+      if (echoed == '\n')
+        break;
     }
-
-    return i;
-  }
-
-  if (!valid_fd(fd))
-    return (uint64_t)-1;
-
-  fs::vfs::Node *node = fd_table[fd];
-
-  if (node->dev && node->dev->read)
-    return node->dev->read(buf, len);
-
-  if (!node->directory && node->file && node->file->private_data) {
-    size_t avail = node->file->size;
-    size_t n = len < avail ? len : avail;
-
-    memcpy(buf, node->file->private_data, n);
 
     return n;
   }
 
-  return 0;
+  return -1;
 }
 
 static uint64_t sys_open(uint64_t a) {

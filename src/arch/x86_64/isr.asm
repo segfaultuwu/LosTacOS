@@ -183,6 +183,11 @@ isr128:
     push r15
 
 
+    ; Re-enable interrupts before dispatching: some syscalls (e.g. blocking
+    ; stdin reads) busy-wait on state that only IRQ handlers (keyboard, timer)
+    ; can update. Leaving IF cleared here would deadlock any blocking syscall.
+    sti
+
     ; syscall_handler(num,a,b,c)
     mov rdi, [rsp+112] ; rax syscall number
     mov rsi, [rsp+104] ; rbx arg1
@@ -236,13 +241,13 @@ isr_stub_common:
 
     ; after registers are not pushed yet:
     ; rsp:
-    ; 0 error
-    ; 8 vector
+    ; 0 vector
+    ; 8 error
     ; 16 rip
 
 
-    mov rdi,[rsp+8]
-    mov rsi,[rsp]
+    mov rdi,[rsp]
+    mov rsi,[rsp+8]
 
     mov rdx,[rsp+16]
 
