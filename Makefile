@@ -81,8 +81,9 @@ LDFLAGS = \
 	-z max-page-size=0x1000
 
 
+
 # =========================
-# Sources
+# Kernel sources
 # =========================
 
 SRC_CPP := $(shell find src -name "*.cpp")
@@ -97,11 +98,12 @@ OBJ_ASM := $(patsubst src/%.asm,$(OBJDIR)/%.asm.o,$(SRC_ASM))
 
 OBJ = $(OBJ_CPP) $(OBJ_C) $(OBJ_ASM)
 
+
 DEP = $(OBJ:.o=.d)
 
 
 
-.PHONY: all iso clean run user tarfs libc version
+.PHONY: all iso clean run user tarfs libc usr rootfs_dirs headers version
 
 
 all: iso
@@ -109,11 +111,12 @@ all: iso
 
 
 # =========================
-# Build dir
+# Build dirs
 # =========================
 
 $(BUILD):
 	mkdir -p $(OBJDIR)
+	mkdir -p $(BUILD)/libc
 
 
 
@@ -152,20 +155,26 @@ $(KERNEL): version $(OBJ)
 
 
 # =========================
-# User libc
+# libc
 # =========================
 
 LIBC_ASM := $(shell find libc -name "*.asm")
 LIBC_C   := $(shell find libc -name "*.c")
 
-LIBC_OBJ := $(LIBC_ASM:.asm=.o) $(LIBC_C:.c=.o)
+
+LIBC_OBJ := \
+	$(patsubst libc/%.asm,$(BUILD)/libc/%.o,$(LIBC_ASM)) \
+	$(patsubst libc/%.c,$(BUILD)/libc/%.o,$(LIBC_C))
 
 
 
-%.o: %.asm
+$(BUILD)/libc/%.o: libc/%.asm
+	@mkdir -p $(dir $@)
 	$(AS) -f elf64 $< -o $@
 
-libc/%.o: libc/%.c
+
+$(BUILD)/libc/%.o: libc/%.c
+	@mkdir -p $(dir $@)
 	$(CC) \
 		-std=c23 \
 		-ffreestanding \
@@ -178,6 +187,7 @@ libc/%.o: libc/%.c
 		-o $@
 
 
+
 libc: $(LIBC_OBJ)
 
 	mkdir -p $(ROOTFS)/usr/lib
@@ -186,10 +196,11 @@ libc: $(LIBC_OBJ)
 	$(ROOTFS)/usr/lib/libc.a \
 	$(LIBC_OBJ)
 
+
 	mkdir -p $(ROOTFS)/lib
 
-	cp libc/src/crt0.o \
-	$(ROOTFS)/lib/
+	cp $(BUILD)/libc/src/crt0.o \
+	$(ROOTFS)/lib/crt0.o
 
 
 
@@ -197,12 +208,23 @@ libc: $(LIBC_OBJ)
 # User programs
 # =========================
 
+USR_BIN := $(shell find usr/bin -type f)
+
+
+usr:
+	mkdir -p $(ROOTFS)/usr
+
+	cp -r usr/* \
+	$(ROOTFS)/usr/
+
+
+
 bin/init: bin/init.c libc
 	$(LTOSCC) $< -o $@
 
 
 
-user: bin/init
+user: bin/init usr
 
 
 
@@ -211,6 +233,7 @@ user: bin/init
 # =========================
 
 rootfs_dirs:
+
 	rm -rf $(ROOTFS)
 
 	mkdir -p \
@@ -218,6 +241,7 @@ rootfs_dirs:
 	$(ROOTFS)/lib \
 	$(ROOTFS)/usr/include \
 	$(ROOTFS)/usr/lib \
+	$(ROOTFS)/usr/bin \
 	$(ROOTFS)/dev \
 	$(ROOTFS)/proc \
 	$(ROOTFS)/sys \
@@ -226,16 +250,27 @@ rootfs_dirs:
 
 
 headers: rootfs_dirs
+
 	cp -r libc/include/* \
 	$(ROOTFS)/usr/include/
 
 
 
-tarfs: headers libc user
+rootfs: headers libc user
 
 	cp bin/init \
 	$(ROOTFS)/bin/init
 
+
+
+usr:
+
+	cp -r usr/* \
+	$(ROOTFS)/usr/
+
+
+
+tarfs: rootfs
 
 	$(TAR) \
 	--format=ustar \
@@ -283,6 +318,7 @@ iso: $(KERNEL) tarfs
 # =========================
 
 run: iso
+
 	qemu-system-x86_64 \
 	-cdrom $(ISO) \
 	-serial stdio \
@@ -292,6 +328,7 @@ run: iso
 
 
 debug: iso
+
 	qemu-system-x86_64 \
 	-cdrom $(ISO) \
 	-serial stdio \
@@ -304,9 +341,10 @@ debug: iso
 # =========================
 
 clean:
+
 	rm -rf $(BUILD)
 	rm -f bin/init
-	rm -f $(LIBC_OBJ)
+
 
 
 -include $(DEP)

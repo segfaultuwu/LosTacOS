@@ -7,6 +7,6 @@ int main() {
   motd = "Hello, LosTacOS!";
   printf("%s\n", motd);
   free(motd);
-  exec("/bin/sh");
+  exec("/usr/bin/sh");
   return 0;
 }
