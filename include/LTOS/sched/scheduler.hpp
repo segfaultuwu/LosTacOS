@@ -19,6 +19,8 @@ void yield();
 void idle();
 void exit();
 
+Task *find(uint64_t pid);
+
 Process *clone(Process *parent);
 
 void add(Task *task);

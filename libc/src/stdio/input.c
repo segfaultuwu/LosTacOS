@@ -38,6 +38,20 @@ int scanf(const char *fmt, ...) {
 
     fmt++;
 
+    // Parse an optional field width, e.g. the "127" in "%127s". Without
+    // this, fmt points at '1' here, which matches neither 's' nor 'd'
+    // below, so the conversion was silently skipped entirely -- no
+    // getchar_internal() call ever happened, cmd was never touched, and
+    // the shell's while(1) loop just spun printing "los> " as fast as
+    // possible forever. This also lets %s actually respect the width so
+    // a long line can't overflow the caller's buffer.
+    int width = 0;
+
+    while (*fmt >= '0' && *fmt <= '9') {
+      width = width * 10 + (*fmt - '0');
+      fmt++;
+    }
+
     if (*fmt == 's') {
       char *buf = va_arg(args, char *);
 
@@ -51,7 +65,9 @@ int scanf(const char *fmt, ...) {
       } while (c == ' ' || c == '\n');
 
       while (c != ' ' && c != '\n' && c != -1) {
-        buf[i++] = c;
+        if (width == 0 || i < width)
+          buf[i++] = c;
+
         c = getchar_internal();
       }
 

@@ -38,10 +38,7 @@ void sleep_ms(unsigned long ms) {
 }
 
 long wait(int pid) {
-  (void)pid;
-
-  // TODO: SYS_WAIT
-  return 0;
+  return syscall(SYS_WAIT, pid, 0, 0);
 }
 
 long lseek(int fd, long offset, int whence) {

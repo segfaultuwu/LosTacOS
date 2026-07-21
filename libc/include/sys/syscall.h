@@ -12,5 +12,6 @@
 #define SYS_SLEEP 10
 #define SYS_LSEEK 11
 #define SYS_FSIZE 12
+#define SYS_WAIT 13
 
 extern long syscall(long num, long a, long b, long c);

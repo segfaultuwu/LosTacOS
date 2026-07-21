@@ -247,6 +247,28 @@ static uint64_t sys_fsize(uint64_t a) {
   return node->file ? node->file->size : 0;
 }
 
+// wait() was previously a no-op stub in libc, so the shell's execute()
+// never actually waited for the child it just fork()ed+exec()ed -- it
+// went straight back around its while(1) loop and issued a *new*
+// blocking scanf()/read() while the child might still be running,
+// which is what made the prompt look like it wasn't waiting for input:
+// the parent was already back at the next prompt instead of pausing
+// for the command that was still in flight. Block here (same
+// sti-before-dispatch + hlt pattern sys_read uses) until the target
+// task is gone or marked DEAD.
+static uint64_t sys_wait(uint64_t a) {
+  uint64_t pid = a;
+
+  while (true) {
+    sched::Task *task = sched::find(pid);
+
+    if (!task || task->state == sched::State::DEAD)
+      return 0;
+
+    asm volatile("hlt");
+  }
+}
+
 uint64_t sys_fork() {
   sched::Task *parent_task = sched::get_current();
 
@@ -313,6 +335,9 @@ uint64_t syscall_handler(uint64_t num, uint64_t a, uint64_t b, uint64_t c) {
 
   case SYS_FSIZE:
     return sys_fsize(a);
+
+  case SYS_WAIT:
+    return sys_wait(a);
 
   default:
     kprintf("syscall: unknown syscall %lu\n", num);

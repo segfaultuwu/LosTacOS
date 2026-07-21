@@ -210,6 +210,15 @@ Task *get_current() {
   return current_task;
 }
 
+Task *find(uint64_t pid) {
+  for (Task *t = head; t; t = t->next) {
+    if (t->pid == pid)
+      return t;
+  }
+
+  return nullptr;
+}
+
 void yield() {
   asm volatile("int $32");
 }
@@ -240,6 +249,21 @@ Process *clone(Process *parent) {
     return nullptr;
 
   memcpy(child, parent, sizeof(Process));
+
+  // memcpy above copies the parent's pid and space pointer verbatim.
+  // Every process here calls exec() right after fork() (see bin/hello.c),
+  // and exec() maps the new program straight into proc->space -- if that's
+  // still literally the parent's AddressSpace, exec() ends up overwriting
+  // the parent's own memory while the parent is still running. Give the
+  // child its own address space (and its own pid, so it isn't mistaken
+  // for the parent) instead of aliasing the parent's.
+  child->pid = pid_counter++;
+  child->space = mm::AddressSpace::create();
+
+  if (!child->space) {
+    heap::kfree(child);
+    return nullptr;
+  }
 
   Task *task = create_task(child, (void *)task_wrapper, nullptr);
 
