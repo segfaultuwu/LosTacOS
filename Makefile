@@ -146,7 +146,7 @@ $(OBJDIR)/%.asm.o: src/%.asm
 # Kernel
 # =========================
 
-$(KERNEL): $(OBJ) version
+$(KERNEL): version $(OBJ)
 	$(LD) $(LDFLAGS) -o $@ $(OBJ)
 
 
