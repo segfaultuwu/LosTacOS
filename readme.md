@@ -21,6 +21,7 @@ LosTacOS is a simple operating system written in C/C++/NASM. It is designed to b
 ## Requirements
 
 - **QEMU** - for running the OS
+- **GRUB** - for making a bootable iso
 - **NASM** - for assembling the isr and other things
 - **GCC** - for compiling the kernel
 - **CLANG** - for compiling the user programs
