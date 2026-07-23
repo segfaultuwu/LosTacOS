@@ -6,7 +6,7 @@ extern "C" {
 void lidt(void *);
 void isr0();
 void irq0();
-extern uint64_t isr_stub_table[256];
+extern "C" uint64_t isr_stub_table[];
 void irq1_handler();
 void isr128();
 }
