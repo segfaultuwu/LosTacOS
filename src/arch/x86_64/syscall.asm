@@ -33,9 +33,6 @@ isr128:
     push r15
 
 
-    sti
-
-
     ; syscall ABI:
     ; rax = number
     ; rbx = arg1

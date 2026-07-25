@@ -2,6 +2,7 @@
 #include "LTOS/drivers/timer.hpp"
 #include "LTOS/fs/vfs.hpp"
 #include "LTOS/lib/kprintf.h"
+#include "LTOS/mm/heap.hpp"
 #include "LTOS/sched/scheduler.hpp"
 #include "LTOS_gen/version.h"
 
@@ -53,18 +54,34 @@ static int read_uptime(fs::vfs::File *file, uint8_t *buffer, size_t size) {
   return n;
 }
 
+static fs::vfs::Node *make_proc_file(const char *path,
+                                     int (*read_fn)(fs::vfs::File *, uint8_t *, size_t)) {
+  auto *node = fs::vfs::create_file_path(path);
+
+  if (!node) {
+    kprintf("procfs: failed to create %s\n", path);
+    return nullptr;
+  }
+
+  node->file = (fs::vfs::File *)heap::kmalloc(sizeof(fs::vfs::File));
+
+  node->file->size = 0;
+  node->file->offset = 0;
+  node->file->private_data = nullptr;
+  node->file->read = read_fn;
+  node->file->write = nullptr;
+
+  return node;
+}
+
 void init() {
   kprintf("procfs init\n");
 
   fs::vfs::create_dir_path("/proc");
 
-  auto *version = fs::vfs::create_file("/proc/version");
+  make_proc_file("/proc/version", read_version);
 
-  version->file->read = read_version;
-
-  auto *uptime = fs::vfs::create_file("/proc/uptime");
-
-  uptime->file->read = read_uptime;
+  make_proc_file("/proc/uptime", read_uptime);
 }
 
 } // namespace fs::procfs

@@ -25,14 +25,20 @@ AddressSpace *AddressSpace::create() {
 
   space->table = paging::clone_kernel_table();
 
+  if (!space->table) {
+    heap::kfree(space);
+    return nullptr;
+  }
+
   return space;
 }
 
 void AddressSpace::destroy() {
-  if (table) {
+  if (table && table != (paging::PageTable *)paging::kernel_pml4) {
     heap::kfree(table);
-    table = nullptr;
   }
+
+  table = nullptr;
 
   heap::kfree(this);
 }

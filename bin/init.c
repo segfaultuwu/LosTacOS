@@ -13,7 +13,17 @@ int main() {
   char buf[256];
   long n = read(fd, buf, sizeof(buf));
 
-  write(1, buf, n);
+  printf("Uptime: %s", buf);
+
+  int fd2 = open("/proc/version");
+  if (fd2 < 0) {
+    printf("open(\"/proc/version\") failed\n");
+  }
+
+  char buf2[256];
+  long n2 = read(fd2, buf2, sizeof(buf2));
+
+  printf("Version: %s", buf2);
 
   exec("/usr/bin/sh");
   return 0;

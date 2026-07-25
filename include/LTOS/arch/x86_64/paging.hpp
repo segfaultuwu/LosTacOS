@@ -77,6 +77,8 @@ void map_page(uint64_t *pml4, uint64_t va, uint64_t pa, uint64_t flags);
 
 void unmap_page(uint64_t *pml4, uint64_t va);
 
+void clone_user_pages(uint64_t *dst_pml4, uint64_t *src_pml4);
+
 void *alloc_page();
 
 } // namespace paging

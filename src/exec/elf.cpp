@@ -4,6 +4,7 @@
 #include "LTOS/logger.hpp"
 #include "LTOS/mm/heap.hpp"
 
+#include <cstdint>
 #include <string.h>
 
 namespace elf {
@@ -17,6 +18,13 @@ uint64_t load(const char *path, mm::AddressSpace *space) {
     return 0;
   }
 
+  if (!space || !space->table) {
+    logger::error("ELF: %s has no address space", path);
+    return 0;
+  }
+
+  uint64_t *pml4 = space->table->pml4;
+
   char *data = fs::vfs::get_content(node);
 
   if (!data) {
@@ -26,51 +34,91 @@ uint64_t load(const char *path, mm::AddressSpace *space) {
 
   Elf64_Ehdr *hdr = (Elf64_Ehdr *)data;
 
-  if (hdr->e_ident[0] != 0x7f || hdr->e_ident[1] != 'E' || hdr->e_ident[2] != 'L' ||
-      hdr->e_ident[3] != 'F') {
+  if (memcmp(hdr->e_ident,
+             "\x7F"
+             "ELF",
+             4) != 0) {
     logger::error("Not ELF");
     return 0;
   }
 
-  // logger::info("ELF entry: %x", hdr->e_entry);
-
   Elf64_Phdr *ph = (Elf64_Phdr *)(data + hdr->e_phoff);
+
+  uint64_t min_vaddr = UINT64_MAX;
+  uint64_t max_vaddr = 0;
+
+  for (int i = 0; i < hdr->e_phnum; i++) {
+    if (ph[i].p_type != PT_LOAD)
+      continue;
+
+    if (ph[i].p_vaddr < min_vaddr)
+      min_vaddr = ph[i].p_vaddr;
+
+    if (ph[i].p_vaddr + ph[i].p_memsz > max_vaddr)
+      max_vaddr = ph[i].p_vaddr + ph[i].p_memsz;
+  }
+
+  min_vaddr &= ~0xFFFULL;
+  max_vaddr = (max_vaddr + 0xFFF) & ~0xFFFULL;
+
+  uint64_t size = max_vaddr - min_vaddr;
+
+  uint64_t base = 0x40000000;
 
   for (int i = 0; i < hdr->e_phnum; i++) {
 
     if (ph[i].p_type != PT_LOAD)
       continue;
 
-    // logger::info("LOAD %x size %x", ph[i].p_vaddr, ph[i].p_memsz);
+    uint64_t seg_vaddr = ph[i].p_vaddr;
+    uint64_t seg_filesz = ph[i].p_filesz;
+    uint64_t seg_offset = ph[i].p_offset;
 
-    uint64_t vaddr = ph[i].p_vaddr;
-    uint64_t memsz = ph[i].p_memsz;
-    uint64_t filesz = ph[i].p_filesz;
+    uint64_t seg_start = seg_vaddr & ~0xFFFULL;
+    uint64_t seg_end = (seg_vaddr + ph[i].p_memsz + 0xFFF) & ~0xFFFULL;
 
-    // Tasks currently all run in ring 0 sharing the kernel's own address
-    // space (paging::kernel_pml4) -- there's no per-task CR3 switch in the
-    // scheduler yet -- and setup_kernel_identity() only identity-maps the
-    // low 256 MiB up front. Make sure every page this segment touches is
-    // actually present (identity: va == pa) before copying into it, rather
-    // than assuming it's already mapped.
-    uint64_t page = vaddr & ~0xFFFULL;
-    uint64_t end = (vaddr + memsz + 0xFFF) & ~0xFFFULL;
+    for (uint64_t addr = seg_start; addr < seg_end; addr += 0x1000) {
 
-    for (; page < end; page += 0x1000) {
-      paging::map_page(paging::kernel_pml4, page, page, PAGE_PRESENT | PAGE_WRITABLE);
+      void *page = paging::alloc_page(); // zeroed already -- covers .bss
+
+      if (!page) {
+        logger::error("OOM");
+        return 0;
+      }
+
+      uint64_t phys = (uint64_t)page;
+
+      uint64_t virt = base + (addr - min_vaddr);
+
+      paging::map_page(pml4, virt, phys, PAGE_PRESENT | PAGE_WRITABLE);
+
+      // Copy whatever slice of the file's content overlaps this page.
+      // The file-backed range within this segment is
+      // [seg_vaddr, seg_vaddr + seg_filesz); write through the
+      // physical page directly since `pml4` isn't active in CR3 yet.
+      uint64_t page_start = addr;
+      uint64_t page_end = addr + 0x1000;
+
+      uint64_t copy_start = seg_vaddr > page_start ? seg_vaddr : page_start;
+      uint64_t copy_end = (seg_vaddr + seg_filesz) < page_end ? (seg_vaddr + seg_filesz) : page_end;
+
+      if (copy_end > copy_start) {
+        uint64_t file_off = seg_offset + (copy_start - seg_vaddr);
+        uint64_t page_off = copy_start - page_start;
+        uint64_t len = copy_end - copy_start;
+
+        memcpy((uint8_t *)phys + page_off, data + file_off, len);
+      }
     }
-
-    memcpy((void *)vaddr, data + ph[i].p_offset, filesz);
-
-    // logger::info("AFTER COPY %x %x %x %x %x", ((uint8_t *)vaddr)[0], ((uint8_t *)vaddr)[1],
-    //              ((uint8_t *)vaddr)[2], ((uint8_t *)vaddr)[3], ((uint8_t *)vaddr)[4]);
-
-    // Zero-fill .bss (the part of the segment beyond the file's content).
-    if (memsz > filesz)
-      memset((void *)(vaddr + filesz), 0, memsz - filesz);
   }
 
-  return hdr->e_entry;
+  uint64_t entry = base + (hdr->e_entry - min_vaddr);
+
+  logger::info("ELF entry raw: %x", hdr->e_entry);
+
+  logger::info("ELF loaded at %x entry %x", base, entry);
+
+  return entry;
 }
 
 } // namespace elf

@@ -220,29 +220,96 @@ void enable_paging() {
 uint64_t *create_address_space() {
   uint64_t *pml4 = (uint64_t *)alloc_page();
 
+  // Higher half: keep sharing directly with the kernel table (unused by
+  // anything today, but preserved for whenever it is).
   for (int i = 256; i < 512; i++) {
     pml4[i] = kernel_pml4[i];
   }
 
+  // pml4[0] covers the entire low <512GB range, split into 1GB PDPT
+  // slots. Only ONE of those slots is meant to be private per process:
+  // slot 1 (va [1GB, 2GB), i.e. base 0x40000000), which is where
+  // elf::load() places every process's binary. Every other slot --
+  // the low identity map (heap, kernel image, etc., in slot 0), the
+  // framebuffer (wherever QEMU happens to put it -- often several GB
+  // in, i.e. a completely different slot), and anything else the
+  // kernel maps into its own table -- needs to stay shared, or a
+  // process faults the moment it touches something like the console.
+  constexpr int USER_PDPT_SLOT = 0x40000000 >> 30;
+
+  uint64_t *pdpt = (uint64_t *)alloc_page();
+
+  uint64_t *kernel_pdpt = (uint64_t *)(kernel_pml4[0] & ~0xFFFULL);
+
+  if (kernel_pdpt) {
+    for (int i = 0; i < 512; i++) {
+      if (i == USER_PDPT_SLOT)
+        continue; // left private/empty -- elf::load() populates this per process
+
+      pdpt[i] = kernel_pdpt[i];
+    }
+  }
+
+  pml4[0] = (uint64_t)pdpt | PAGE_PRESENT | PAGE_WRITABLE;
+
   return pml4;
 }
 
-PageTable *clone_kernel_table() {
-  /*
-      Na razie używamy tej samej tablicy.
-      Prawdziwy fork zrobi kopię PML4.
-  */
+void clone_user_pages(uint64_t *dst_pml4, uint64_t *src_pml4) {
+  uint64_t *src_pdpt = (uint64_t *)(src_pml4[0] & ~0xFFFULL);
 
-  return (PageTable *)kernel_pml4;
+  if (!src_pdpt)
+    return;
+
+  // Only the one PDPT slot dedicated to the per-process ELF/user region
+  // (see create_address_space()) is actually private -- everything else
+  // is shared with the kernel already, so only that slot needs copying.
+  constexpr int USER_PDPT_SLOT = 0x40000000 >> 30;
+
+  int pi = USER_PDPT_SLOT;
+
+  if (!(src_pdpt[pi] & PAGE_PRESENT))
+    return;
+
+  uint64_t *src_pd = (uint64_t *)(src_pdpt[pi] & ~0xFFFULL);
+
+  for (int di = 0; di < 512; di++) {
+    if (!(src_pd[di] & PAGE_PRESENT))
+      continue;
+
+    uint64_t *src_pt = (uint64_t *)(src_pd[di] & ~0xFFFULL);
+
+    for (int ti = 0; ti < 512; ti++) {
+      if (!(src_pt[ti] & PAGE_PRESENT))
+        continue;
+
+      uint64_t va = ((uint64_t)pi << 30) | ((uint64_t)di << 21) | ((uint64_t)ti << 12);
+
+      uint64_t src_phys = src_pt[ti] & ~0xFFFULL;
+      uint64_t flags = src_pt[ti] & 0xFFF;
+
+      void *dst_page = alloc_page();
+
+      // Physical == virtual for every page this OS hands out (all
+      // within the shared low identity map), so we can just read
+      // src_phys directly from kernel context.
+      for (int w = 0; w < 512; w++)
+        ((uint64_t *)dst_page)[w] = ((uint64_t *)src_phys)[w];
+
+      map_page(dst_pml4, va, (uint64_t)dst_page, flags);
+    }
+  }
+}
+
+PageTable *clone_kernel_table() {
+  return PageTable::create();
 }
 
 void switch_page_table(PageTable *table) {
   if (!table)
     return;
 
-  uint64_t addr = (uint64_t)table;
-
-  asm volatile("mov %0, %%cr3" : : "r"(addr) : "memory");
+  asm volatile("mov %0, %%cr3" : : "r"(table->phys) : "memory");
 }
 
 } // namespace paging

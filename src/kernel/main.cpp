@@ -165,9 +165,9 @@ extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
 
   logger::test("Heap: test1 = %d", *test1);
 
-  auto hello = fs::vfs::find("/bin/init");
+  auto init = fs::vfs::find("/bin/init");
 
-  if (!hello) {
+  if (!init) {
     logger::error("ELF: /bin/init not found");
   } else {
     sched::exec("/bin/init");

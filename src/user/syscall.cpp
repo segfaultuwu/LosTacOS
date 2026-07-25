@@ -72,7 +72,6 @@ static uint64_t sys_write(uint64_t a, uint64_t b, uint64_t c) {
   // idk why it does not render without it, it's already in console::write lol
   framebuffer::swap();
 
-  // Writing to regular files through an fd isn't supported yet.
   return (uint64_t)-1;
 }
 
@@ -89,7 +88,7 @@ static uint64_t sys_read(uint64_t a, uint64_t b, uint64_t c) {
 
     while (n < len) {
       if (stdin_len == 0) {
-        asm volatile("hlt");
+        asm volatile("sti; hlt; cli");
         continue;
       }
 
@@ -120,6 +119,16 @@ static uint64_t sys_read(uint64_t a, uint64_t b, uint64_t c) {
 
   if (node->dev && node->dev->read)
     return node->dev->read(buf, len);
+
+  if (!node->directory && node->file && node->file->read) {
+    node->file->offset = entry.offset;
+
+    int n = node->file->read(node->file, (uint8_t *)buf, len);
+
+    entry.offset = node->file->offset;
+
+    return n;
+  }
 
   if (!node->directory && node->file && node->file->private_data) {
     size_t size = node->file->size;
@@ -257,7 +266,7 @@ static uint64_t sys_wait(uint64_t a) {
     if (!task || task->state == sched::State::DEAD)
       return 0;
 
-    asm volatile("hlt");
+    asm volatile("sti; hlt; cli");
   }
 }
 
@@ -280,8 +289,6 @@ static uint64_t sys_fork() {
   if (child->main_thread && child->main_thread->regs) {
     child->main_thread->regs->rax = 0;
   }
-
-  sched::add(child->main_thread);
 
   return child->pid;
 }

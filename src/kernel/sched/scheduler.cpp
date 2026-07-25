@@ -1,4 +1,5 @@
 #include "LTOS/sched/scheduler.hpp"
+#include "LTOS/arch/x86_64/paging.hpp"
 #include "LTOS/exec/elf.hpp"
 #include "LTOS/logger.hpp"
 #include "LTOS/mm/address_space.hpp"
@@ -106,7 +107,7 @@ Process *create_process(uint64_t entry) {
 
   proc->space = mm::AddressSpace::create(); // albo clone kernel space
 
-  Task *task = create_task(proc, (void *)task_wrapper, (void *)entry);
+  Task *task = create_task(proc, (void *)entry, nullptr);
 
   proc->main_thread = task;
 
@@ -155,7 +156,7 @@ void exec(const char *path) {
     return;
   }
 
-  Task *task = create_task(proc, (void *)task_wrapper, (void *)entry);
+  Task *task = create_task(proc, (void *)entry, nullptr);
 
   proc->main_thread = task;
 }
@@ -265,12 +266,41 @@ Process *clone(Process *parent) {
     return nullptr;
   }
 
+  paging::clone_user_pages(child->space->table->pml4, parent->space->table->pml4);
+
   Task *task = create_task(child, (void *)task_wrapper, nullptr);
 
   if (!task)
     return nullptr;
 
   memcpy(task->regs, parent->main_thread->regs, sizeof(Registers));
+
+  // The Registers we just copied still hold the PARENT's rsp/rbp, i.e.
+  // addresses inside the parent's own 8KB stack -- not the fresh one
+  // create_task() just gave this child. Copy the live portion of the
+  // parent's stack (from its current rsp up to the top) into the same
+  // relative position in the child's own stack, and shift rsp/rbp by
+  // the offset between the two stacks' top addresses, so the child's
+  // saved registers point into its own copy instead of aliasing the
+  // parent's live stack.
+  uint64_t parent_top = ((uint64_t)parent->main_thread->stack + 8192) & ~0xFULL;
+  uint64_t child_top = ((uint64_t)task->stack + 8192) & ~0xFULL;
+
+  uint64_t parent_rsp = task->regs->rsp; // just copied from the parent
+
+  uint64_t used = parent_top - parent_rsp;
+
+  if (used > 8192)
+    used = 8192; // defensive clamp -- shouldn't happen
+
+  int64_t delta = (int64_t)child_top - (int64_t)parent_top;
+
+  uint64_t child_rsp = (uint64_t)((int64_t)parent_rsp + delta);
+
+  memcpy((void *)child_rsp, (void *)parent_rsp, used);
+
+  task->regs->rsp = child_rsp;
+  task->regs->rbp = (uint64_t)((int64_t)task->regs->rbp + delta);
 
   // fork() == 0 in child
   task->regs->rax = 0;
