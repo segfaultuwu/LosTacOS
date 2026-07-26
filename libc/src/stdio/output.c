@@ -45,6 +45,36 @@ static void print_uint(unsigned long x) {
     putc(buf[i]);
 }
 
+static void buf_putc(char *buf, size_t size, size_t *pos, char c) {
+  if (*pos + 1 < size)
+    buf[*pos] = c;
+
+  (*pos)++;
+}
+
+static void buf_puts(char *buf, size_t size, size_t *pos, const char *s) {
+  while (*s)
+    buf_putc(buf, size, pos, *s++);
+}
+
+static void buf_put_uint(char *buf, size_t size, size_t *pos, unsigned long x) {
+  char tmp[32];
+  int i = 0;
+
+  if (x == 0) {
+    buf_putc(buf, size, pos, '0');
+    return;
+  }
+
+  while (x) {
+    tmp[i++] = '0' + (x % 10);
+    x /= 10;
+  }
+
+  while (i--)
+    buf_putc(buf, size, pos, tmp[i]);
+}
+
 int printf(const char *fmt, ...) {
   va_list args;
 
@@ -112,4 +142,82 @@ int printf(const char *fmt, ...) {
   va_end(args);
 
   return 0;
+}
+
+int snprintf(char *buf, size_t size, const char *fmt, ...) {
+  va_list args;
+
+  va_start(args, fmt);
+
+  size_t pos = 0;
+
+  for (; *fmt; fmt++) {
+
+    if (*fmt != '%') {
+      buf_putc(buf, size, &pos, *fmt);
+      continue;
+    }
+
+    fmt++;
+
+    switch (*fmt) {
+
+    case 's': {
+      char *s = va_arg(args, char *);
+
+      buf_puts(buf, size, &pos, s);
+
+      break;
+    }
+
+    case 'd': {
+      int x = va_arg(args, int);
+
+      if (x < 0) {
+        buf_putc(buf, size, &pos, '-');
+        x = -x;
+      }
+
+      buf_put_uint(buf, size, &pos, x);
+
+      break;
+    }
+
+    case 'u': {
+      unsigned int x = va_arg(args, unsigned int);
+
+      buf_put_uint(buf, size, &pos, x);
+
+      break;
+    }
+
+    case 'c': {
+      int c = va_arg(args, int);
+
+      buf_putc(buf, size, &pos, c);
+
+      break;
+    }
+
+    case '%':
+      buf_putc(buf, size, &pos, '%');
+      break;
+
+    default:
+      buf_putc(buf, size, &pos, '%');
+      buf_putc(buf, size, &pos, *fmt);
+      break;
+    }
+  }
+
+  if (size > 0) {
+    if (pos >= size)
+      buf[size - 1] = 0;
+    else
+      buf[pos] = 0;
+  }
+
+  va_end(args);
+
+  return pos;
 }

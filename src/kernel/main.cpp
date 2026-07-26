@@ -170,7 +170,7 @@ extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
   if (!init) {
     logger::error("ELF: /bin/init not found");
   } else {
-    sched::exec("/bin/init");
+    sched::spawn("/bin/init");
   }
 
   asm volatile("sti");

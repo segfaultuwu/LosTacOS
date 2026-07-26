@@ -138,7 +138,7 @@ void create(uint64_t entry) {
   create_process(entry);
 }
 
-void exec(const char *path) {
+void spawn(const char *path) {
   Process *proc = (Process *)heap::kmalloc(sizeof(Process));
   if (!proc)
     return;
@@ -152,13 +152,89 @@ void exec(const char *path) {
   uint64_t entry = elf::load(path, proc->space);
 
   if (!entry) {
-    logger::error("exec failed %s", path);
+    logger::error("spawn failed %s", path);
     return;
   }
 
   Task *task = create_task(proc, (void *)entry, nullptr);
 
   proc->main_thread = task;
+}
+
+extern "C" void exec_enter(Registers *r);
+
+bool exec_current(const char *path) {
+  Task *task = current_task;
+
+  if (!task || !task->process)
+    return false;
+
+  Process *proc = task->process;
+
+  // Load the new program into a brand-new address space FIRST, before
+  // touching anything belonging to the caller. If the path is bad, the
+  // ELF is malformed, or we're out of memory, the caller's own image is
+  // left completely untouched and exec() just reports failure -- same as
+  // real exec() returning -1.
+  mm::AddressSpace *new_space = mm::AddressSpace::create();
+
+  if (!new_space)
+    return false;
+
+  uint64_t entry = elf::load(path, new_space);
+
+  if (!entry) {
+    new_space->destroy();
+    logger::error("exec failed %s", path);
+    return false;
+  }
+
+  // The new program's pages are fully populated now, so it's safe to
+  // retire the old ones. Swap the process's address space and switch CR3
+  // right away: this code is still running on behalf of `proc`, and is
+  // about to hand control straight to the new entry point below, so the
+  // old page tables must not be relied on (or freed) a moment later.
+  mm::AddressSpace *old_space = proc->space;
+
+  proc->space = new_space;
+
+  new_space->activate();
+
+  if (old_space)
+    old_space->destroy();
+
+  // Rebuild the initial register frame at the top of THIS task's own
+  // stack, the same way create_task() sets one up for a brand-new task --
+  // same Task/Process objects and the same pid throughout, so anything
+  // waiting on this pid (wait(), getpid()) still resolves correctly. Only
+  // the program image and stack contents are replaced.
+  uint64_t stack_top = (uint64_t)task->stack + 8192;
+
+  stack_top &= ~0xFULL;
+
+  Registers *r = (Registers *)(stack_top - sizeof(Registers));
+
+  memset(r, 0, sizeof(Registers));
+
+  r->rip = entry;
+
+  r->rsp = stack_top;
+
+  r->cs = 0x08;
+
+  r->ss = 0x10;
+
+  r->rflags = 0x202;
+
+  task->regs = r;
+
+  // exec() never returns to the caller on success -- jump straight into
+  // the new program instead of unwinding back through the syscall's own
+  // iretq, which would otherwise resume the old (just-destroyed) program
+  // right where it left off.
+  exec_enter(r);
+
+  __builtin_unreachable();
 }
 
 Registers *schedule(Registers *old) {

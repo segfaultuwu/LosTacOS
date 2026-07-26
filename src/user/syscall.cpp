@@ -183,9 +183,11 @@ static uint64_t sys_exec(uint64_t a) {
   if (!path)
     return (uint64_t)-1;
 
-  sched::exec(path);
+  // Does not return here on success -- it jumps straight into the new
+  // program. Only comes back if the load failed.
+  sched::exec_current(path);
 
-  return 0;
+  return (uint64_t)-1;
 }
 
 static uint64_t sys_getpid() {

@@ -114,9 +114,9 @@ uint64_t load(const char *path, mm::AddressSpace *space) {
 
   uint64_t entry = base + (hdr->e_entry - min_vaddr);
 
-  logger::info("ELF entry raw: %x", hdr->e_entry);
+  // logger::info("ELF entry raw: %x", hdr->e_entry);
 
-  logger::info("ELF loaded at %x entry %x", base, entry);
+  // logger::info("ELF loaded at %x entry %x", base, entry);
 
   return entry;
 }
