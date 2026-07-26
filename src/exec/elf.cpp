@@ -63,7 +63,7 @@ uint64_t load(const char *path, mm::AddressSpace *space) {
 
   uint64_t size = max_vaddr - min_vaddr;
 
-  uint64_t base = 0x40000000;
+  uint64_t base = 0;
 
   for (int i = 0; i < hdr->e_phnum; i++) {
 
@@ -88,7 +88,7 @@ uint64_t load(const char *path, mm::AddressSpace *space) {
 
       uint64_t phys = (uint64_t)page;
 
-      uint64_t virt = base + (addr - min_vaddr);
+      uint64_t virt = addr;
 
       paging::map_page(pml4, virt, phys, PAGE_PRESENT | PAGE_WRITABLE);
 
@@ -112,7 +112,7 @@ uint64_t load(const char *path, mm::AddressSpace *space) {
     }
   }
 
-  uint64_t entry = base + (hdr->e_entry - min_vaddr);
+  uint64_t entry = hdr->e_entry;
 
   // logger::info("ELF entry raw: %x", hdr->e_entry);
 

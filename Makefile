@@ -28,6 +28,8 @@ ISO = $(BUILD)/LosTacOS-x86_64.iso
 ROOTFS = $(BUILD)/rootfs
 TARFS = $(BUILD)/rootfs.tar
 
+LTOS_SYSROOT = $(HOME)/.ltos/toolchain/sysroot
+
 
 # =========================
 # Flags
@@ -38,11 +40,19 @@ COMMON_FLAGS = \
 	-fno-builtin \
 	-fno-stack-protector \
 	-mno-red-zone \
-	-mno-sse \
-	-mno-sse2 \
 	-mno-mmx \
 	-mno-avx \
 	-mgeneral-regs-only
+
+LIBC_FLAGS = \
+	-msse \
+	-msse2 \
+	-std=c23 \
+	-ffreestanding \
+	-fno-builtin \
+	-fno-stack-protector \
+	-mno-red-zone \
+	-Ilibc/include \
 
 
 DEBUG ?= 0
@@ -155,80 +165,6 @@ $(KERNEL): version $(OBJ)
 
 
 # =========================
-# libc
-# =========================
-
-LIBC_ASM := $(shell find libc -name "*.asm")
-LIBC_C   := $(shell find libc -name "*.c")
-
-
-LIBC_OBJ := \
-	$(patsubst libc/%.asm,$(BUILD)/libc/%.o,$(LIBC_ASM)) \
-	$(patsubst libc/%.c,$(BUILD)/libc/%.o,$(LIBC_C))
-
-
-
-$(BUILD)/libc/%.o: libc/%.asm
-	@mkdir -p $(dir $@)
-	$(AS) -f elf64 $< -o $@
-
-
-$(BUILD)/libc/%.o: libc/%.c
-	@mkdir -p $(dir $@)
-	$(CC) \
-		-std=c23 \
-		-ffreestanding \
-		-fno-builtin \
-		-fno-stack-protector \
-		-mno-red-zone \
-		-mgeneral-regs-only \
-		-Ilibc/include \
-		-c $< \
-		-o $@
-
-
-
-libc: $(LIBC_OBJ)
-
-	mkdir -p $(ROOTFS)/usr/lib
-
-	$(AR) rcs \
-	$(ROOTFS)/usr/lib/libc.a \
-	$(LIBC_OBJ)
-
-
-	mkdir -p $(ROOTFS)/lib
-
-	cp $(BUILD)/libc/src/crt0.o \
-	$(ROOTFS)/lib/crt0.o
-
-
-
-# =========================
-# User programs
-# =========================
-
-USR_BIN := $(shell find usr/bin -type f)
-
-
-usr:
-	mkdir -p $(ROOTFS)/usr
-
-	cp -r usr/* \
-	$(ROOTFS)/usr/
-
-
-
-bin/init: bin/init.c libc
-	$(LTOSCC) $< -o $@
-
-
-
-user: bin/init usr
-
-
-
-# =========================
 # RootFS
 # =========================
 
@@ -250,18 +186,96 @@ rootfs_dirs:
 
 
 headers: rootfs_dirs
-
+	mkdir -p $(ROOTFS)/usr/include
 	cp -r libc/include/* \
-	$(ROOTFS)/usr/include/
+		$(ROOTFS)/usr/include/
 
 
 
-rootfs: headers libc user
+rootfs: rootfs_dirs headers libc user
 
 	cp bin/init \
 	$(ROOTFS)/bin/init
 
 
+
+# =========================
+# libc
+# =========================
+
+LIBC_ASM := $(shell find libc -name "*.asm")
+LIBC_C   := $(shell find libc -name "*.c")
+
+
+LIBC_OBJ := \
+	$(patsubst libc/%.asm,$(BUILD)/libc/%.o,$(LIBC_ASM)) \
+	$(patsubst libc/%.c,$(BUILD)/libc/%.o,$(LIBC_C))
+
+
+
+$(BUILD)/libc/%.o: libc/%.asm
+	@mkdir -p $(dir $@)
+	$(AS) -f elf64 $< -o $@
+
+
+$(BUILD)/libc/%.o: libc/%.c
+	@mkdir -p $(dir $@)
+	$(CC) \
+		$(LIBC_FLAGS) \
+		-c $< \
+		-o $@
+
+
+
+libc: headers $(LIBC_OBJ)
+
+	mkdir -p $(ROOTFS)/usr/lib
+	mkdir -p $(ROOTFS)/lib
+
+	$(AR) rcs \
+		$(ROOTFS)/usr/lib/libc.a \
+		$(LIBC_OBJ)
+
+	cp $(BUILD)/libc/src/crt0.o \
+		$(ROOTFS)/lib/crt0.o
+
+
+	mkdir -p $(LTOS_SYSROOT)
+
+	rm -rf $(LTOS_SYSROOT)/usr
+	rm -rf $(LTOS_SYSROOT)/lib
+
+	cp -r $(ROOTFS)/usr \
+		$(LTOS_SYSROOT)/
+
+	cp -r $(ROOTFS)/lib \
+		$(LTOS_SYSROOT)/
+
+
+
+# =========================
+# User programs
+# =========================
+
+USR_BIN := $(shell find usr/bin -type f)
+
+
+usr:
+	mkdir -p $(ROOTFS)/usr
+
+	cp -r usr/* \
+	$(ROOTFS)/usr/
+
+
+
+bin/init.o: bin/init.c
+	$(LTOSCC) -c $< -o $@
+
+
+bin/init: bin/init.o
+	./tools/ltosld $@ bin/init.o
+
+user: bin/init usr
 
 usr:
 

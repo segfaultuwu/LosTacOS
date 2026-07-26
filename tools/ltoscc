@@ -2,18 +2,10 @@
 
 set -e
 
-SRC="$1"
-OUT="$3"
+SYSROOT="$HOME/.ltos/toolchain/sysroot"
 
-clang \
-    --config cfg/clang-ltos.cfg \
-    "$SRC"
-
-ld \
-    -T cfg/user.ld \
-    -nostdlib \
-    -e _start \
-    -o "$OUT" \
-    build/rootfs/lib/crt0.o \
-    /tmp/ltos-program.o \
-    build/rootfs/usr/lib/libc.a
+exec clang \
+    --target=x86_64-unknown-none \
+    --sysroot="$SYSROOT" \
+    -isystem "$SYSROOT/usr/include" \
+    "$@"

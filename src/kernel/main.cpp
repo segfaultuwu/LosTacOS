@@ -29,6 +29,8 @@
 #include "LTOS_gen/version.h"
 #include "multiboot.h"
 
+#include "LTOS/arch/x86_64/sse.h"
+
 #include <cstdint>
 
 bool state::vfs_initialized = false;
@@ -73,6 +75,9 @@ extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
 
   idt::init();
   logger::info("IDT Initialized");
+
+  sse_init();
+  logger::info("SSE Initialized");
 
   //
   // Memory
