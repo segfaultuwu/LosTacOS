@@ -157,7 +157,7 @@ static uint64_t sys_open(uint64_t a) {
 
   fs::vfs::Node *node = fs::vfs::find(path);
 
-  if (!node || node->directory)
+  if (!node)
     return (uint64_t)-1;
 
   int fd = alloc_fd(node);
@@ -313,6 +313,43 @@ static uint64_t sys_munmap(uint64_t ptr) {
   return 0;
 }
 
+static uint64_t sys_readdir(uint64_t a, uint64_t b) {
+  int fd = (int)a;
+  fs::vfs::Dirent *out = (fs::vfs::Dirent *)b;
+
+  if (!valid_fd(fd))
+    return -1;
+
+  FdEntry &entry = fd_table[fd];
+
+  auto *dir = entry.node;
+
+  if (!dir->directory)
+    return -1;
+
+  auto *child = dir->children;
+
+  size_t index = 0;
+
+  while (child) {
+    if (index == entry.offset) {
+      strcpy(out->name, child->name);
+
+      out->directory = child->directory;
+
+      entry.offset++;
+
+      return 1;
+    }
+
+    index++;
+
+    child = child->next;
+  }
+
+  return 0;
+}
+
 uint64_t syscall_handler(uint64_t num, uint64_t a, uint64_t b, uint64_t c) {
   // kprintf("SYSCALL %lu a=%lx b=%lx c=%lx\n", num, a, b, c);
 
@@ -363,6 +400,9 @@ uint64_t syscall_handler(uint64_t num, uint64_t a, uint64_t b, uint64_t c) {
 
   case SYS_MUNMAP:
     return sys_munmap(a);
+
+  case SYS_READDIR:
+    return sys_readdir(a, b);
 
   default:
     kprintf("syscall: unknown syscall %lu\n", num);

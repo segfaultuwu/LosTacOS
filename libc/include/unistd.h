@@ -1,5 +1,6 @@
 #pragma once
 
+#include "dirent.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -42,6 +43,8 @@ extern int open(const char *path);
 extern int close(int fd);
 
 extern long read(int fd, void *buf, size_t len);
+
+extern int sys_readdir(int fd, struct dirent *dir);
 
 extern long write(int fd, const void *buf, size_t len);
 

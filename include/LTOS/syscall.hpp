@@ -18,6 +18,7 @@ enum Syscall {
   SYS_WAIT,
   SYS_MMAP,
   SYS_MUNMAP,
+  SYS_READDIR,
 };
 
 extern "C" uint64_t syscall_handler(uint64_t num, uint64_t a, uint64_t b, uint64_t c);

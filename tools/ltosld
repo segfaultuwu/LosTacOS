@@ -12,9 +12,9 @@ shift
 
 
 exec ld \
-    -T "$ROOT_DIR/cfg/user.ld" \
+    -T $HOME/.ltos/linker.ld \
     -nostdlib \
-    -o "$OUT" \
-    "$SYSROOT/lib/crt0.o" \
-    "$@" \
-    "$SYSROOT/usr/lib/libc.a"
+    -o $OUT \
+    $SYSROOT/lib/crt0.o \
+    $@ \
+    $SYSROOT/usr/lib/libc.a

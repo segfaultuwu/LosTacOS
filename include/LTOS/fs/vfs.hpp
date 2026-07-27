@@ -21,7 +21,7 @@ struct File {
   int (*write)(File *file, const uint8_t *buffer, size_t size);
 };
 
-enum NodeType { VFS_FILE, VFS_DIR, VFS_DEV, VFS_TAR };
+enum NodeType { VFS_FILE, VFS_DIR, VFS_DEV, VFS_TAR, VFS_SYMLINK };
 
 struct Node {
 
@@ -35,9 +35,15 @@ struct Node {
   Node *next;
   Node *children;
 
-  File *file;
+  char *symlink;
 
+  File *file;
   DevOps *dev;
+};
+
+struct Dirent {
+  char name[128];
+  bool directory;
 };
 
 extern Node *root;
@@ -70,6 +76,8 @@ Node *set_current();
 Node *create_file(const char *name);
 
 Node *create_dir(const char *name);
+
+Node *create_symlink_path(const char *path, const char *target);
 
 char *get_name(Node *node);
 

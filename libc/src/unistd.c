@@ -13,6 +13,10 @@ long read(int fd, void *buf, size_t len) {
   return syscall(SYS_READ, fd, (long)buf, (long)len);
 }
 
+int sys_readdir(int fd, struct dirent *dir) {
+  return syscall(SYS_READDIR, fd, (long)dir, 0);
+}
+
 long write(int fd, const void *buf, size_t len) {
   return syscall(SYS_WRITE, fd, (long)buf, (long)len);
 }

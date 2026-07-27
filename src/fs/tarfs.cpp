@@ -130,10 +130,29 @@ void mount_vfs() {
 
     char *path = normalize(path_buf);
 
-    // Strip a trailing slash (tar directory entries are stored as "dir/").
     size_t plen = strlen(path);
     if (plen > 0 && path[plen - 1] == '/')
       path[plen - 1] = '\0';
+
+    if (hdr->typeflag == '2') {
+
+      char link_buf[101];
+
+      strncpy(link_buf, hdr->linkname, sizeof(hdr->linkname));
+
+      link_buf[sizeof(hdr->linkname)] = '\0';
+
+      auto node = fs::vfs::create_symlink_path(path, link_buf);
+
+      if (node) {
+        kprintf("tarfs: added symlink %s -> %s\n", path, link_buf);
+      } else {
+        logger::warn("tarfs: failed symlink %s", path);
+      }
+
+      ptr += 512 + blocks * 512;
+      continue;
+    }
 
     bool is_dir = hdr->typeflag == '5';
 

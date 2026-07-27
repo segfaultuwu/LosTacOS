@@ -25,6 +25,6 @@ int main() {
 
   printf("Version: %s", buf2);
 
-  exec("/usr/bin/sh");
+  exec("/bin/sh");
   return 0;
 }

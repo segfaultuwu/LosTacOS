@@ -7,6 +7,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 namespace fs::vfs {
 
@@ -230,6 +231,21 @@ void list_dir(Node *n) {
   }
 }
 
+Node *create_symlink_path(const char *path, const char *target) {
+  Node *node = create_file_path(path);
+
+  if (!node)
+    return nullptr;
+
+  node->type = NodeType::VFS_SYMLINK;
+
+  node->symlink = (char *)heap::kmalloc(strlen(target) + 1);
+
+  strcpy(node->symlink, target);
+
+  return node;
+}
+
 void set_current(Node *node) {
   if (node && node->directory)
     current_dir = node;
@@ -270,28 +286,51 @@ Node *find(const char *path) {
   size_t i = 0;
 
   for (size_t p = (path[0] == '/' ? 1 : 0);; p++) {
+
     if (path[p] == '/' || path[p] == 0) {
+
       part[i] = 0;
 
       if (i == 0) {
-        // skip //
+
       } else if (part[0] == '.' && part[1] == 0) {
-        // .
+
       } else if (part[0] == '.' && part[1] == '.' && part[2] == 0) {
+
         if (node->parent)
           node = node->parent;
+
       } else {
+
         node = find_in(node, part);
+
         if (!node)
           return nullptr;
+
+        // resolve symlinks
+        int depth = 0;
+
+        while (node->type == NodeType::VFS_SYMLINK) {
+
+          if (depth++ >= 8)
+            return nullptr;
+
+          node = find(node->symlink);
+
+          if (!node)
+            return nullptr;
+        }
       }
 
       i = 0;
 
       if (path[p] == 0)
         break;
+
     } else {
-      part[i++] = path[p];
+
+      if (i < sizeof(part) - 1)
+        part[i++] = path[p];
     }
   }
 

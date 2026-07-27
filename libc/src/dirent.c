@@ -3,10 +3,6 @@
 #include <string.h>
 #include <sys/syscall.h>
 
-#define SYS_OPENDIR 18
-#define SYS_READDIR 19
-#define SYS_CLOSEDIR 20
-
 DIR *opendir(const char *path) {
   int fd = (int)syscall(SYS_OPENDIR, (long)path, 0, 0);
 

@@ -15,5 +15,8 @@
 #define SYS_WAIT 13
 #define SYS_MMAP 14
 #define SYS_MUNMAP 15
+#define SYS_READDIR 16
+#define SYS_OPENDIR 17
+#define SYS_CLOSEDIR 18
 
 extern long syscall(long num, long a, long b, long c);
