@@ -37,7 +37,29 @@ static int read_uptime(fs::vfs::File *file, uint8_t *buffer, size_t size) {
 
   uint64_t sec = timer::get_uptime_sec();
 
-  int len = ksnprintf(uptime, sizeof(uptime), "%lu\n", sec);
+  int len = ksnprintf(uptime, sizeof(uptime), "%lu", sec);
+
+  if (file->offset >= (size_t)len)
+    return 0;
+
+  size_t n = len - file->offset;
+
+  if (n > size)
+    n = size;
+
+  memcpy(buffer, uptime + file->offset, n);
+
+  file->offset += n;
+
+  return n;
+}
+
+static int read_uptime_ms(fs::vfs::File *file, uint8_t *buffer, size_t size) {
+  static char uptime[64];
+
+  uint64_t sec = timer::get_uptime_ms();
+
+  int len = ksnprintf(uptime, sizeof(uptime), "%lu", sec);
 
   if (file->offset >= (size_t)len)
     return 0;
@@ -82,6 +104,7 @@ void init() {
   make_proc_file("/proc/version", read_version);
 
   make_proc_file("/proc/uptime", read_uptime);
+  make_proc_file("/proc/uptime_ms", read_uptime_ms);
 }
 
 } // namespace fs::procfs

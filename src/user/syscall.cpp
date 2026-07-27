@@ -1,16 +1,16 @@
 #include "LTOS/syscall.hpp"
 #include "LTOS/drivers/console.hpp"
 #include "LTOS/drivers/framebuffer.hpp"
-#include "LTOS/drivers/keyboard.hpp"
 #include "LTOS/drivers/serial.hpp"
 #include "LTOS/drivers/timer.hpp"
+#include "LTOS/drivers/tty/ioctl.hpp"
 #include "LTOS/fs/vfs.hpp"
 #include "LTOS/lib/kprintf.h"
-#include "LTOS/logger.hpp"
 #include "LTOS/mm/heap.hpp"
 #include "LTOS/sched/process.hpp"
 #include "LTOS/sched/scheduler.hpp"
 #include "LTOS/sched/task.hpp"
+#include "sys/time.h"
 #include <cstddef>
 #include <cstdint>
 #include <string.h>
@@ -177,17 +177,19 @@ static uint64_t sys_close(uint64_t a) {
   return 0;
 }
 
-static uint64_t sys_exec(uint64_t a) {
+static uint64_t sys_execve(uint64_t a, uint64_t b, uint64_t c) {
   const char *path = (const char *)a;
+  char **argv = (char **)b;
+  char **envp = (char **)c;
 
-  if (!path)
+  // On success exec_current() never returns (it jumps straight into the new
+  // program via exec_enter()). It only returns here on failure, so that's
+  // the only case we need to convert -- and it must come back as -1, not 0,
+  // or callers checking `execve(...) < 0` will think it succeeded.
+  if (!sched::exec_current(path, argv, envp))
     return (uint64_t)-1;
 
-  // Does not return here on success -- it jumps straight into the new
-  // program. Only comes back if the load failed.
-  sched::exec_current(path);
-
-  return (uint64_t)-1;
+  return 0;
 }
 
 static uint64_t sys_getpid() {
@@ -295,8 +297,12 @@ static uint64_t sys_fork() {
   return child->pid;
 }
 
-static uint64_t sys_mmap(size_t size) {
-  void *ptr = heap::kmalloc(size);
+static uint64_t sys_mmap(uint64_t a, uint64_t b) {
+  (void)a; // requested address (arg1) -- ignored, we always pick the address
+
+  size_t len = (size_t)b; // arg2: length
+
+  void *ptr = heap::kmalloc(len);
 
   if (!ptr)
     return 0;
@@ -356,7 +362,55 @@ static uint64_t sys_readdir(uint64_t a, uint64_t b) {
   return 0;
 }
 
-uint64_t syscall_handler(uint64_t num, uint64_t a, uint64_t b, uint64_t c) {
+static uint64_t sys_ioctl(uint64_t a, uint64_t b, uint64_t c) {
+  int fd = a;
+  unsigned long req = b;
+  void *arg = (void *)c;
+
+  if (req == TIOCGWINSZ) {
+    auto *ws = (winsize *)arg;
+
+    ws->ws_row = 25;
+    ws->ws_col = 80;
+
+    ws->ws_xpixel = 0;
+    ws->ws_ypixel = 0;
+
+    return 0;
+  }
+
+  if (req == TCGETS) {
+    auto *term = (termios *)arg;
+
+    memset(term, 0, sizeof(termios));
+
+    return 0;
+  }
+
+  if (req == TCSETS) {
+    // here later raw mode
+    return 0;
+  }
+
+  return -1;
+}
+
+static uint64_t sys_gettimeofday(uint64_t a) {
+  auto *tv = (timeval *)a;
+
+  if (!tv)
+    return -1;
+
+  uint64_t ms = timer::ticks();
+
+  tv->tv_sec = ms / 1000;
+  tv->tv_usec = (ms % 1000) * 1000;
+
+  return 0;
+}
+
+extern "C" uint64_t syscall_handler(uint64_t num, uint64_t a, uint64_t b, uint64_t c, uint64_t d,
+                                    uint64_t e, uint64_t f) {
   // kprintf("SYSCALL %lu a=%lx b=%lx c=%lx\n", num, a, b, c);
 
   switch (num) {
@@ -373,8 +427,8 @@ uint64_t syscall_handler(uint64_t num, uint64_t a, uint64_t b, uint64_t c) {
   case SYS_CLOSE:
     return sys_close(a);
 
-  case SYS_EXEC:
-    return sys_exec(a);
+  case SYS_EXECVE:
+    return sys_execve(a, b, c);
 
   case SYS_FORK:
     return sys_fork();
@@ -398,17 +452,26 @@ uint64_t syscall_handler(uint64_t num, uint64_t a, uint64_t b, uint64_t c) {
   case SYS_FSIZE:
     return sys_fsize(a);
 
-  case SYS_WAIT:
+  case SYS_WAIT4:
     return sys_wait(a);
 
+  case SYS_NANOSLEEP:
+    return sys_sleep(a);
+
+  case SYS_IOCTL:
+    return sys_ioctl(a, b, c);
+
   case SYS_MMAP:
-    return sys_mmap(a);
+    return sys_mmap(a, b);
 
   case SYS_MUNMAP:
     return sys_munmap(a);
 
   case SYS_READDIR:
     return sys_readdir(a, b);
+
+  case SYS_GETTIMEOFDAY:
+    return sys_gettimeofday(a);
 
   default:
     kprintf("syscall: unknown syscall %lu\n", num);

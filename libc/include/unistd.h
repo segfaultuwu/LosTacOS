@@ -3,73 +3,111 @@
 #include "dirent.h"
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <sys/types.h>
+#include <termios.h>
 
-/*
- * File offsets
- */
+typedef long ssize_t;
+typedef long off_t;
+typedef unsigned int mode_t;
 
-#define SEEK_SET 0
-#define SEEK_CUR 1
-#define SEEK_END 2
+struct timespec {
+  long tv_sec;
+  long tv_nsec;
+};
 
-/*
- * Process
- */
+struct stat {
+  uint64_t st_dev;
+  uint64_t st_ino;
+  uint64_t st_mode;
+  uint64_t st_nlink;
+  uint64_t st_uid;
+  uint64_t st_gid;
+  uint64_t st_size;
+};
 
-extern int getpid(void);
+struct linux_dirent64 {
+  uint64_t d_ino;
+  int64_t d_off;
+  unsigned short d_reclen;
+  unsigned char d_type;
+  char d_name[];
+};
 
-extern int yield(void);
+#define STDIN_FILENO 0
+#define STDOUT_FILENO 1
+#define STDERR_FILENO 2
 
-extern int fork(void);
+int isatty(int fd);
 
-extern long wait(int pid);
+int atexit(void (*func)(void));
 
-extern void exit(int status);
+/* basic io */
 
-extern int exec(const char *path);
+int open(const char *path);
 
-/*
- * Time
- */
+int close(int fd);
 
-extern void sleep_ms(unsigned long ms);
+ssize_t read(int fd, void *buf, size_t count);
 
-/*
- * Files
- */
+int sys_readdir(int fd, struct dirent *ent);
 
-extern int open(const char *path);
+ssize_t write(int fd, const void *buf, size_t count);
 
-extern int close(int fd);
+/* process */
 
-extern long read(int fd, void *buf, size_t len);
+void exit(int status);
 
-extern int sys_readdir(int fd, struct dirent *dir);
+pid_t getpid(void);
 
-extern long write(int fd, const void *buf, size_t len);
+int fork(void);
 
-extern long lseek(int fd, long offset, int whence);
+int execve(const char *pathname, char *const argv[], char *const envp[]);
 
-extern long fsize(int fd);
+pid_t wait4(pid_t pid, int *status, int options, void *rusage);
 
-/*
- * Memory
- */
+/* scheduler */
 
-extern void *malloc(size_t size);
+int sched_yield(void);
 
-extern void free(void *ptr);
+/* time */
 
-/*
- * Console helpers
- */
+int nanosleep(const struct timespec *req, struct timespec *rem);
 
-extern int getchar(void);
+/* files */
 
-extern int putchar(int c);
+off_t lseek(int fd, off_t offset, int whence);
 
-/*
- * System
- */
+int unlink(const char *path);
 
-extern long syscall(long number, long arg1, long arg2, long arg3);
+int mkdir(const char *path, mode_t mode);
+
+int chdir(const char *path);
+
+char *getcwd(char *buf, size_t size);
+
+/* memory */
+
+void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
+
+int munmap(void *addr, size_t length);
+
+int brk(void *addr);
+
+/* directory */
+
+int getdents64(unsigned int fd, struct linux_dirent64 *dirp, unsigned int count);
+
+/* terminal */
+
+int isatty(int fd);
+
+/* misc */
+
+int dup(int oldfd);
+
+int dup2(int oldfd, int newfd);
+
+int stat(const char *path, struct stat *buf);
+
+long syscall(long number, ...);

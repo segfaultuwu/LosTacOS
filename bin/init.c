@@ -5,26 +5,42 @@ int main() {
   char *motd = "Hello, LosTacOS!";
   printf("%s\n", motd);
 
-  int fd = open("/proc/uptime");
+  int fd = open("/proc/uptime_ms");
   if (fd < 0) {
-    printf("open(\"/proc/uptime\") failed\n");
+    printf("open(\"/proc/uptime_ms\") failed\n");
+  } else {
+    char buf[256];
+    long n = read(fd, buf, sizeof(buf) - 1);
+    if (n < 0)
+      n = 0;
+    buf[n] = '\0';
+
+    printf("Boot time: %sms\n", buf);
+    close(fd);
   }
-
-  char buf[256];
-  long n = read(fd, buf, sizeof(buf));
-
-  printf("Uptime: %s", buf);
 
   int fd2 = open("/proc/version");
   if (fd2 < 0) {
     printf("open(\"/proc/version\") failed\n");
+  } else {
+    char buf2[256];
+    long n2 = read(fd2, buf2, sizeof(buf2) - 1);
+    if (n2 < 0)
+      n2 = 0;
+    buf2[n2] = '\0';
+
+    printf("Version: %s\n", buf2);
+    close(fd2);
   }
 
-  char buf2[256];
-  long n2 = read(fd2, buf2, sizeof(buf2));
+  printf("Launching /bin/sh..\n");
 
-  printf("Version: %s", buf2);
+  char *argv[] = {"sh", NULL};
 
-  exec("/bin/sh");
-  return 0;
+  char *envp[] = {NULL};
+
+  execve("/bin/sh", argv, envp);
+
+  printf("execve(\"/bin/sh\") failed\n");
+  return 1;
 }

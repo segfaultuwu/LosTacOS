@@ -3,14 +3,12 @@ BITS 64
 section .text
 
 global isr128
-
 extern syscall_handler
 
 
 isr128:
 
     cli
-
 
     push rax
     push rbx
@@ -33,20 +31,24 @@ isr128:
     push r15
 
 
-    ; syscall ABI:
-    ; rax = number
-    ; rbx = arg1
-    ; rcx = arg2
-    ; rdx = arg3
+    ; userspace (libc/src/syscall.asm) hands us: rax=num rdi=a1 rsi=a2 rdx=a3
+    ; r10=a4 r8=a5 r9=a6. After the pushes above, those live at:
+    ;   rax=112 rdi=72 rsi=80 rdx=88 r10=40 r8=56 r9=48
 
+    mov rax,[rsp+48]  ; arg6 (was r9) -- grab before the stack shifts below
+    push rax          ; pass it as syscall_handler's 7th (stack) argument
 
-    mov rdi,[rsp+112]
-    mov rsi,[rsp+104]
-    mov rdx,[rsp+96]
-    mov rcx,[rsp+88]
+    mov rdi,[rsp+8+112] ; syscall number
+    mov rsi,[rsp+8+72]  ; arg1
+    mov rdx,[rsp+8+80]  ; arg2
+    mov rcx,[rsp+8+88]  ; arg3
+    mov r8, [rsp+8+40]  ; arg4 (was r10)
+    mov r9, [rsp+8+56]  ; arg5 (was r8)
 
 
     call syscall_handler
+
+    add rsp, 8        ; drop the arg6 slot we pushed
 
 
     mov [rsp+112],rax
@@ -71,6 +73,5 @@ isr128:
     pop rcx
     pop rbx
     pop rax
-
 
     iretq

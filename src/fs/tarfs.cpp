@@ -9,8 +9,29 @@
 
 namespace fs::tarfs {
 
+struct TarEntry {
+  char name[256];
+  uint8_t *data;
+  size_t size;
+  bool directory;
+};
+
+constexpr size_t MAX_TAR_FILES = 512;
+
+static TarEntry entries[MAX_TAR_FILES];
+static size_t entry_count = 0;
+
 static uint8_t *tar_start = nullptr;
 static size_t tar_size = 0;
+
+static bool empty_block(TarHeader *hdr) {
+  for (int i = 0; i < 512; i++) {
+    if (((uint8_t *)hdr)[i])
+      return false;
+  }
+
+  return true;
+}
 
 static size_t octal_to_int(const char *str, size_t len) {
   size_t value = 0;
@@ -26,28 +47,10 @@ static size_t octal_to_int(const char *str, size_t len) {
   return value;
 }
 
-void mount(void *address, size_t size) {
-  kprintf("TARFS MOUNT root=%p\n", fs::vfs::root);
-  tar_start = (uint8_t *)address;
-  tar_size = size;
-
-  logger::info("TARFS mounted addr=%lx size=%lu", (uint64_t)address, size);
-}
-
-static bool empty_block(TarHeader *hdr) {
-  for (int i = 0; i < 512; i++) {
-    if (((uint8_t *)hdr)[i])
-      return false;
-  }
-
-  return true;
-}
-
-File *find(const char *name) {
-  if (!tar_start)
-    return nullptr;
-
+static void build_index() {
   uint8_t *ptr = tar_start;
+
+  entry_count = 0;
 
   while (ptr < tar_start + tar_size) {
     auto *hdr = (TarHeader *)ptr;
@@ -57,24 +60,46 @@ File *find(const char *name) {
 
     size_t size = octal_to_int(hdr->size, sizeof(hdr->size));
 
-    if (strcmp(hdr->name, name) == 0) {
+    if (entry_count < MAX_TAR_FILES) {
+      TarEntry *e = &entries[entry_count++];
+
+      strncpy(e->name, hdr->name, sizeof(e->name) - 1);
+
+      e->name[sizeof(e->name) - 1] = 0;
+
+      e->data = ptr + 512;
+      e->size = size;
+      e->directory = hdr->typeflag == '5';
+    }
+
+    ptr += 512 + ((size + 511) / 512) * 512;
+  }
+
+  logger::info("tarfs indexed %lu files", entry_count);
+}
+
+void mount(void *address, size_t size) {
+  tar_start = (uint8_t *)address;
+  tar_size = size;
+
+  build_index();
+}
+
+File *find(const char *name) {
+  for (size_t i = 0; i < entry_count; i++) {
+    if (strcmp(entries[i].name, name) == 0) {
       static File file;
 
-      strncpy(file.name, hdr->name, sizeof(file.name));
+      strncpy(file.name, entries[i].name, sizeof(file.name) - 1);
+
       file.name[sizeof(file.name) - 1] = '\0';
 
-      file.data = ptr + 512;
-
-      file.size = size;
-
-      file.directory = hdr->typeflag == '5';
+      file.data = entries[i].data;
+      file.size = entries[i].size;
+      file.directory = entries[i].directory;
 
       return &file;
     }
-
-    size_t blocks = (size + 511) / 512;
-
-    ptr += 512 + blocks * 512;
   }
 
   return nullptr;
@@ -144,9 +169,7 @@ void mount_vfs() {
 
       auto node = fs::vfs::create_symlink_path(path, link_buf);
 
-      if (node) {
-        kprintf("tarfs: added symlink %s -> %s\n", path, link_buf);
-      } else {
+      if (!node) {
         logger::warn("tarfs: failed symlink %s", path);
       }
 
@@ -162,7 +185,7 @@ void mount_vfs() {
       continue;
     }
 
-    kprintf("tarfs adding: '%s'\n", path);
+    // kprintf("tarfs adding: '%s'\n", path);
 
     if (is_dir) {
       fs::vfs::create_dir_path(path);
@@ -177,7 +200,7 @@ void mount_vfs() {
         node->file->read = nullptr;
         node->file->write = nullptr;
 
-        kprintf("tarfs: added %s (%lu bytes)\n", path, size);
+        // kprintf("tarfs: added %s (%lu bytes)\n", path, size);
       } else {
         logger::warn("tarfs: failed to add %s", path);
       }

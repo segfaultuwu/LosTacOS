@@ -35,7 +35,20 @@ static void task_wrapper(void (*entry)()) {
     asm volatile("hlt");
 }
 
-static Task *create_task(Process *proc, void *entry, void *arg) {
+uint64_t create_user_stack(mm::AddressSpace *space) {
+  uint64_t stack_top = 0x7ffffff000;
+
+  for (int i = 0; i < 8; i++) {
+    uint64_t phys = (uint64_t)paging::alloc_page();
+
+    paging::map_page(space->table->pml4, stack_top - 0x1000 - i * 0x1000, phys,
+                     PAGE_PRESENT | PAGE_USER | PAGE_WRITABLE);
+  }
+
+  return stack_top - 0x1000;
+}
+
+static Task *create_task(Process *proc, uint64_t entry) {
 
   Task *task = (Task *)heap::kmalloc(sizeof(Task));
 
@@ -51,25 +64,31 @@ static Task *create_task(Process *proc, void *entry, void *arg) {
     return nullptr;
   }
 
-  uint64_t stack_top = (uint64_t)task->stack + 8192;
+  uint64_t user_stack = create_user_stack(proc->space);
 
-  stack_top &= ~0xFULL;
+  if (!user_stack) {
+    heap::kfree(task->stack);
+    heap::kfree(task);
+    return nullptr;
+  }
 
-  Registers *r = (Registers *)(stack_top - sizeof(Registers));
+  user_stack &= ~0xFULL;
+
+  Registers *r = (Registers *)(task->stack + 8192 - sizeof(Registers));
 
   memset(r, 0, sizeof(Registers));
 
-  r->rip = (uint64_t)entry;
+  r->rip = entry;
+  r->rsp = user_stack;
 
-  r->rdi = (uint64_t)arg;
-
-  r->rsp = stack_top;
-
-  r->cs = 0x08;
-
-  r->ss = 0x10;
+  // user mode selectors
+  r->cs = 0x1B;
+  r->ss = 0x23;
 
   r->rflags = 0x202;
+
+  r->vector = 0;
+  r->error = 0;
 
   task->pid = pid_counter++;
 
@@ -77,21 +96,11 @@ static Task *create_task(Process *proc, void *entry, void *arg) {
 
   task->state = State::READY;
 
-  task->next = nullptr;
-
   task->process = proc;
 
-  if (!head) {
-    head = task;
-  } else {
+  task->next = nullptr;
 
-    Task *t = head;
-
-    while (t->next)
-      t = t->next;
-
-    t->next = task;
-  }
+  add(task);
 
   return task;
 }
@@ -107,7 +116,7 @@ Process *create_process(uint64_t entry) {
 
   proc->space = mm::AddressSpace::create(); // albo clone kernel space
 
-  Task *task = create_task(proc, (void *)entry, nullptr);
+  Task *task = create_task(proc, entry);
 
   proc->main_thread = task;
 
@@ -139,7 +148,11 @@ void create(uint64_t entry) {
 }
 
 void spawn(const char *path) {
+
+  logger::info("spawn: %s", path);
+
   Process *proc = (Process *)heap::kmalloc(sizeof(Process));
+
   if (!proc)
     return;
 
@@ -149,21 +162,146 @@ void spawn(const char *path) {
 
   proc->space = mm::AddressSpace::create();
 
-  uint64_t entry = elf::load(path, proc->space);
-
-  if (!entry) {
-    logger::error("spawn failed %s", path);
+  if (!proc->space) {
+    heap::kfree(proc);
     return;
   }
 
-  Task *task = create_task(proc, (void *)entry, nullptr);
+  logger::info("loading ELF");
+
+  uint64_t entry = elf::load(path, proc->space);
+
+  logger::info("ELF entry=%lx", entry);
+
+  if (!entry) {
+
+    proc->space->destroy();
+
+    heap::kfree(proc);
+
+    logger::error("spawn failed %s", path);
+
+    return;
+  }
+
+  Task *task = create_task(proc, entry);
+
+  if (!task) {
+
+    proc->space->destroy();
+
+    heap::kfree(proc);
+
+    return;
+  }
 
   proc->main_thread = task;
+
+  logger::info("task created pid=%lu", task->pid);
+}
+
+static uint64_t setup_user_stack(uint64_t stack_top, char **argv, char **envp) {
+  uint64_t sp = stack_top;
+
+  char *argv_ptrs[64];
+  char *env_ptrs[64];
+
+  int argc = 0;
+  int envc = 0;
+
+  // copy string envp
+  if (envp) {
+    while (envp[envc] && envc < 63) {
+
+      size_t len = strlen(envp[envc]) + 1;
+
+      sp -= len;
+
+      memcpy((void *)sp, envp[envc], len);
+
+      env_ptrs[envc] = (char *)sp;
+
+      envc++;
+    }
+  }
+
+  // copy string argv
+  if (argv) {
+    while (argv[argc] && argc < 63) {
+
+      size_t len = strlen(argv[argc]) + 1;
+
+      sp -= len;
+
+      memcpy((void *)sp, argv[argc], len);
+
+      argv_ptrs[argc] = (char *)sp;
+
+      argc++;
+    }
+  }
+
+  /*
+      SysV ABI:
+
+      argc
+      argv[]
+      NULL
+      envp[]
+      NULL
+
+  */
+
+  sp &= ~0xFULL;
+
+  // envp NULL
+  sp -= sizeof(uint64_t);
+  *(uint64_t *)sp = 0;
+
+  // envp[]
+  for (int i = envc - 1; i >= 0; i--) {
+
+    sp -= sizeof(uint64_t);
+
+    *(uint64_t *)sp = (uint64_t)env_ptrs[i];
+  }
+
+  uint64_t envp_addr = sp;
+
+  // argv NULL
+  sp -= sizeof(uint64_t);
+  *(uint64_t *)sp = 0;
+
+  // argv[]
+  for (int i = argc - 1; i >= 0; i--) {
+
+    sp -= sizeof(uint64_t);
+
+    *(uint64_t *)sp = (uint64_t)argv_ptrs[i];
+  }
+
+  uint64_t argv_addr = sp;
+
+  // argc
+  sp -= sizeof(uint64_t);
+
+  *(uint64_t *)sp = argc;
+
+  /*
+     entry:
+
+     rsp % 16 == 8
+  */
+
+  sp &= ~0xFULL;
+
+  return sp;
 }
 
 extern "C" void exec_enter(Registers *r);
 
-bool exec_current(const char *path) {
+bool exec_current(const char *path, char **argv, char **envp) {
+
   Task *task = current_task;
 
   if (!task || !task->process)
@@ -171,11 +309,6 @@ bool exec_current(const char *path) {
 
   Process *proc = task->process;
 
-  // Load the new program into a brand-new address space FIRST, before
-  // touching anything belonging to the caller. If the path is bad, the
-  // ELF is malformed, or we're out of memory, the caller's own image is
-  // left completely untouched and exec() just reports failure -- same as
-  // real exec() returning -1.
   mm::AddressSpace *new_space = mm::AddressSpace::create();
 
   if (!new_space)
@@ -184,16 +317,14 @@ bool exec_current(const char *path) {
   uint64_t entry = elf::load(path, new_space);
 
   if (!entry) {
+
     new_space->destroy();
+
     logger::error("exec failed %s", path);
+
     return false;
   }
 
-  // The new program's pages are fully populated now, so it's safe to
-  // retire the old ones. Swap the process's address space and switch CR3
-  // right away: this code is still running on behalf of `proc`, and is
-  // about to hand control straight to the new entry point below, so the
-  // old page tables must not be relied on (or freed) a moment later.
   mm::AddressSpace *old_space = proc->space;
 
   proc->space = new_space;
@@ -203,35 +334,31 @@ bool exec_current(const char *path) {
   if (old_space)
     old_space->destroy();
 
-  // Rebuild the initial register frame at the top of THIS task's own
-  // stack, the same way create_task() sets one up for a brand-new task --
-  // same Task/Process objects and the same pid throughout, so anything
-  // waiting on this pid (wait(), getpid()) still resolves correctly. Only
-  // the program image and stack contents are replaced.
-  uint64_t stack_top = (uint64_t)task->stack + 8192;
+  uint64_t stack_top = create_user_stack(proc->space);
 
+  uint64_t stack = create_user_stack(proc->space);
+  stack = setup_user_stack(stack, nullptr, nullptr);
   stack_top &= ~0xFULL;
 
-  Registers *r = (Registers *)(stack_top - sizeof(Registers));
+  uint64_t user_stack = setup_user_stack(stack_top, argv, envp);
+
+  Registers *r = (Registers *)(task->stack + 8192 - sizeof(Registers));
 
   memset(r, 0, sizeof(Registers));
 
   r->rip = entry;
 
-  r->rsp = stack_top;
+  r->rsp = stack;
 
-  r->cs = 0x08;
-
-  r->ss = 0x10;
-
+  r->cs = 0x1B;
+  r->ss = 0x23;
   r->rflags = 0x202;
+
+  r->vector = 0;
+  r->error = 0;
 
   task->regs = r;
 
-  // exec() never returns to the caller on success -- jump straight into
-  // the new program instead of unwinding back through the syscall's own
-  // iretq, which would otherwise resume the old (just-destroyed) program
-  // right where it left off.
   exec_enter(r);
 
   __builtin_unreachable();
@@ -279,6 +406,9 @@ Registers *schedule(Registers *old) {
   if (current_task->process) {
     current_task->process->space->activate();
   }
+
+  logger::info("switch pid=%lu rip=%lx rsp=%lx cs=%lx", current_task->pid, current_task->regs->rip,
+               current_task->regs->rsp, current_task->regs->cs);
 
   return current_task->regs;
 }
@@ -344,7 +474,7 @@ Process *clone(Process *parent) {
 
   paging::clone_user_pages(child->space->table->pml4, parent->space->table->pml4);
 
-  Task *task = create_task(child, (void *)task_wrapper, nullptr);
+  Task *task = create_task(child, (uint64_t)task_wrapper);
 
   if (!task)
     return nullptr;

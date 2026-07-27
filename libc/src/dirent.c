@@ -24,10 +24,10 @@ struct dirent *readdir(DIR *dirp) {
   if (!dirp)
     return 0;
 
-  if (sys_readdir(dirp->fd, &dirp->entry))
-    return &dirp->entry;
+  if (sys_readdir(dirp->fd, &dirp->entry) <= 0)
+    return 0;
 
-  return 0;
+  return &dirp->entry;
 }
 
 int closedir(DIR *dirp) {

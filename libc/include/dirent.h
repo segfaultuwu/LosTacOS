@@ -1,15 +1,18 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdint.h>
 
 #define NAME_MAX 255
 
 struct dirent {
-  unsigned long d_ino;
-  unsigned long d_off;
-  unsigned short d_reclen;
-  unsigned char d_type;
-  char d_name[NAME_MAX + 1];
+  uint64_t d_ino;
+  uint64_t d_off;
+
+  uint16_t d_reclen;
+  uint8_t d_type;
+
+  char d_name[256];
 };
 
 typedef struct {
@@ -27,5 +30,7 @@ typedef struct {
 #define DT_SOCK 12
 
 DIR *opendir(const char *path);
+
 struct dirent *readdir(DIR *dirp);
+
 int closedir(DIR *dirp);

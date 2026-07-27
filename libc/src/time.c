@@ -1,3 +1,5 @@
+#include <sys/syscall.h>
+#include <sys/time.h>
 #include <time.h>
 
 time_t time(time_t *t) {
@@ -51,4 +53,16 @@ size_t strftime(char *s, size_t max, const char *format, const struct tm *tm) {
 
 double difftime(time_t end, time_t beginning) {
   return (double)(end - beginning);
+}
+
+// sys/time.h
+int gettimeofday(struct timeval *tv, struct timezone *tz) {
+  (void)tz;
+
+  if (!tv)
+    return -1;
+
+  long ret = syscall(SYS_GETTIMEOFDAY, (long)tv, 0, 0);
+
+  return (int)ret;
 }

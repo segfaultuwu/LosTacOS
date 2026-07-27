@@ -9,46 +9,42 @@ int close(int fd) {
   return (int)syscall(SYS_CLOSE, fd, 0, 0);
 }
 
-long read(int fd, void *buf, size_t len) {
-  return syscall(SYS_READ, fd, (long)buf, (long)len);
+ssize_t read(int fd, void *buf, size_t len) {
+  return syscall(SYS_READ, fd, (long)buf, len);
 }
 
-int sys_readdir(int fd, struct dirent *dir) {
-  return syscall(SYS_READDIR, fd, (long)dir, 0);
+ssize_t write(int fd, const void *buf, size_t len) {
+  return syscall(SYS_WRITE, fd, (long)buf, len);
 }
 
-long write(int fd, const void *buf, size_t len) {
-  return syscall(SYS_WRITE, fd, (long)buf, (long)len);
+int execve(const char *path, char *const argv[], char *const envp[]) {
+  return syscall(SYS_EXECVE, (long)path, (long)argv, (long)envp);
 }
 
-int exec(const char *path) {
-  return (int)syscall(SYS_EXEC, (long)path, 0, 0);
+pid_t getpid(void) {
+  return (pid_t)syscall(SYS_GETPID, 0, 0, 0);
 }
 
-int getpid(void) {
-  return (int)syscall(SYS_GETPID, 0, 0, 0);
-}
-
-int yield(void) {
+int sched_yield(void) {
   return (int)syscall(SYS_YIELD, 0, 0, 0);
 }
 
 int fork(void) {
-  return syscall(SYS_FORK, 0, 0, 0);
+  return (int)syscall(SYS_FORK, 0, 0, 0);
 }
 
-void sleep_ms(unsigned long ms) {
-  syscall(SYS_SLEEP, (long)ms, 0, 0);
+int nanosleep(const struct timespec *req, struct timespec *rem) {
+  return (int)syscall(SYS_NANOSLEEP, (long)req, (long)rem, 0);
 }
 
-long wait(int pid) {
-  return syscall(SYS_WAIT, pid, 0, 0);
+pid_t wait4(pid_t pid, int *status, int options, void *rusage) {
+  return (pid_t)syscall(SYS_WAIT4, pid, (long)status, options, (long)rusage);
 }
 
-long lseek(int fd, long offset, int whence) {
+off_t lseek(int fd, off_t offset, int whence) {
   return syscall(SYS_LSEEK, fd, offset, whence);
 }
 
-long fsize(int fd) {
-  return syscall(SYS_FSIZE, fd, 0, 0);
+int sys_readdir(int fd, struct dirent *ent) {
+  return (int)syscall(SYS_READDIR, fd, (long)ent, 0);
 }
