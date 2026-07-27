@@ -42,8 +42,22 @@ struct Node {
 };
 
 struct Dirent {
-  char name[128];
-  bool directory;
+  uint64_t d_ino;
+  uint64_t d_off;
+  uint16_t d_reclen;
+  uint8_t d_type;
+  char d_name[256];
+};
+
+enum DirType {
+  DT_UNKNOWN = 0,
+  DT_FIFO = 1,
+  DT_CHR = 2,
+  DT_DIR = 4,
+  DT_BLK = 6,
+  DT_REG = 8,
+  DT_LNK = 10,
+  DT_SOCK = 12
 };
 
 extern Node *root;

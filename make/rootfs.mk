@@ -24,7 +24,4 @@ headers: rootfs_dirs
 
 
 rootfs: rootfs_dirs headers libc init
-
-	find $(ROOTDIR) -mindepth 1 \
-		-not -name ".gitignore" \
-		-exec cp -r {} $(ROOTFS)/ \;
+	cp -r $(ROOTDIR)/* $(ROOTFS)/

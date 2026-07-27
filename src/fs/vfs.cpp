@@ -315,7 +315,26 @@ Node *find(const char *path) {
           if (depth++ >= 8)
             return nullptr;
 
-          node = find(node->symlink);
+          char target[256];
+
+          if (node->symlink[0] == '/') {
+
+            strcpy(target, node->symlink);
+
+          } else {
+
+            strcpy(target, "/");
+
+            // katalog rodzica symlinka
+            if (node->parent) {
+              strcat(target, node->parent->name);
+              strcat(target, "/");
+            }
+
+            strcat(target, node->symlink);
+          }
+
+          node = find(target);
 
           if (!node)
             return nullptr;

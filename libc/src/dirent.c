@@ -1,45 +1,42 @@
 #include <dirent.h>
 #include <stdlib.h>
-#include <string.h>
-#include <sys/syscall.h>
+#include <unistd.h>
 
 DIR *opendir(const char *path) {
-  int fd = (int)syscall(SYS_OPENDIR, (long)path, 0, 0);
+  int fd = open(path);
 
   if (fd < 0)
-    return NULL;
+    return 0;
 
   DIR *dir = malloc(sizeof(DIR));
 
-  if (!dir)
-    return NULL;
+  if (!dir) {
+    close(fd);
+    return 0;
+  }
 
   dir->fd = fd;
-
-  memset(&dir->entry, 0, sizeof(struct dirent));
 
   return dir;
 }
 
 struct dirent *readdir(DIR *dirp) {
   if (!dirp)
-    return NULL;
+    return 0;
 
-  long ret = syscall(SYS_READDIR, dirp->fd, (long)&dirp->entry, sizeof(struct dirent));
+  if (sys_readdir(dirp->fd, &dirp->entry))
+    return &dirp->entry;
 
-  if (ret <= 0)
-    return NULL;
-
-  return &dirp->entry;
+  return 0;
 }
 
 int closedir(DIR *dirp) {
   if (!dirp)
     return -1;
 
-  int ret = (int)syscall(SYS_CLOSEDIR, dirp->fd, 0, 0);
+  close(dirp->fd);
 
   free(dirp);
 
-  return ret;
+  return 0;
 }

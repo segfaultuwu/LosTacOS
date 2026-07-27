@@ -315,17 +315,17 @@ static uint64_t sys_munmap(uint64_t ptr) {
 
 static uint64_t sys_readdir(uint64_t a, uint64_t b) {
   int fd = (int)a;
-  fs::vfs::Dirent *out = (fs::vfs::Dirent *)b;
+  auto *out = (fs::vfs::Dirent *)b;
 
-  if (!valid_fd(fd))
-    return -1;
+  if (!valid_fd(fd) || !out)
+    return (uint64_t)-1;
 
-  FdEntry &entry = fd_table[fd];
+  auto &entry = fd_table[fd];
 
   auto *dir = entry.node;
 
   if (!dir->directory)
-    return -1;
+    return (uint64_t)-1;
 
   auto *child = dir->children;
 
@@ -333,9 +333,16 @@ static uint64_t sys_readdir(uint64_t a, uint64_t b) {
 
   while (child) {
     if (index == entry.offset) {
-      strcpy(out->name, child->name);
+      memset(out, 0, sizeof(*out));
 
-      out->directory = child->directory;
+      out->d_ino = 0;
+      out->d_off = entry.offset + 1;
+
+      out->d_reclen = sizeof(*out);
+
+      out->d_type = child->directory ? fs::vfs::DT_DIR : fs::vfs::DT_REG;
+
+      strncpy(out->d_name, child->name, sizeof(out->d_name) - 1);
 
       entry.offset++;
 
@@ -343,7 +350,6 @@ static uint64_t sys_readdir(uint64_t a, uint64_t b) {
     }
 
     index++;
-
     child = child->next;
   }
 
