@@ -23,11 +23,11 @@ static void kernel_idle() {
   }
 }
 
+static uint64_t setup_user_stack(uint64_t stack_top, char **argv, char **envp);
+
 static void task_wrapper(void (*entry)()) {
 
   entry();
-
-  logger::info("task returned");
 
   sched::exit();
 
@@ -36,16 +36,30 @@ static void task_wrapper(void (*entry)()) {
 }
 
 uint64_t create_user_stack(mm::AddressSpace *space) {
-  uint64_t stack_top = 0x7ffffff000;
 
-  for (int i = 0; i < 8; i++) {
-    uint64_t phys = (uint64_t)paging::alloc_page();
+  uint64_t stack_top = 0x7fffff7000;
+  uint64_t stack_size = 0x10000; // 64KB
 
-    paging::map_page(space->table->pml4, stack_top - 0x1000 - i * 0x1000, phys,
-                     PAGE_PRESENT | PAGE_USER | PAGE_WRITABLE);
+  void *top_page = nullptr;
+
+  for (uint64_t addr = stack_top - stack_size; addr < stack_top; addr += 0x1000) {
+
+    void *page = paging::alloc_page();
+
+    paging::map_page(space->table->pml4, addr, (uint64_t)page,
+                     PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
+
+    if (addr + 0x1000 == stack_top)
+      top_page = page;
   }
 
-  return stack_top - 0x1000;
+  uint8_t *top = (uint8_t *)top_page + 0x1000;
+
+  *(uint64_t *)(top - 8) = 0;  // envp
+  *(uint64_t *)(top - 16) = 0; // argv
+  *(uint64_t *)(top - 24) = 0; // argc
+
+  return stack_top - 24;
 }
 
 static Task *create_task(Process *proc, uint64_t entry) {
@@ -73,6 +87,24 @@ static Task *create_task(Process *proc, uint64_t entry) {
   }
 
   user_stack &= ~0xFULL;
+
+  // crt0's _start reads argc straight from [rsp] with no push first, so
+  // rsp must already point at a valid argc/argv/envp frame inside mapped
+  // memory -- not at the raw (unmapped) top-of-stack address.
+  //
+  // setup_user_stack() writes through that raw user-space VA directly, and
+  // that mapping only exists in proc->space's own page tables -- it isn't
+  // reachable through whatever table is currently active (kernel_task's,
+  // or another process's). Switch to it for the duration of the write,
+  // then switch back, same as exec_current() does.
+  mm::AddressSpace *caller_space = current_task ? current_task->process->space : nullptr;
+
+  proc->space->activate();
+
+  user_stack = setup_user_stack(user_stack, nullptr, nullptr);
+
+  if (caller_space)
+    caller_space->activate();
 
   Registers *r = (Registers *)(task->stack + 8192 - sizeof(Registers));
 
@@ -148,9 +180,6 @@ void create(uint64_t entry) {
 }
 
 void spawn(const char *path) {
-
-  logger::info("spawn: %s", path);
-
   Process *proc = (Process *)heap::kmalloc(sizeof(Process));
 
   if (!proc)
@@ -167,11 +196,12 @@ void spawn(const char *path) {
     return;
   }
 
-  logger::info("loading ELF");
-
   uint64_t entry = elf::load(path, proc->space);
 
-  logger::info("ELF entry=%lx", entry);
+  // Note: the user stack is set up inside create_task() -> create_user_stack()
+  // below; it used to also be mapped here, but that just leaked the physical
+  // pages allocated for it since create_task() maps the same virtual range
+  // again right after.
 
   if (!entry) {
 
@@ -196,8 +226,6 @@ void spawn(const char *path) {
   }
 
   proc->main_thread = task;
-
-  logger::info("task created pid=%lu", task->pid);
 }
 
 static uint64_t setup_user_stack(uint64_t stack_top, char **argv, char **envp) {
@@ -254,6 +282,17 @@ static uint64_t setup_user_stack(uint64_t stack_top, char **argv, char **envp) {
 
   sp &= ~0xFULL;
 
+  // From here we push a fixed number of 8-byte slots: envp NULL, envc
+  // envp pointers, argv NULL, argc argv pointers, and finally argc itself
+  // -- that's 8 * (3 + envc + argc) bytes. For the final rsp (where argc
+  // lands) to satisfy the ABI's rsp % 16 == 8 at entry, that total must be
+  // == 8 (mod 16), i.e. (envc + argc) must be even. Pad here if it isn't --
+  // NOT next to argc itself, since crt0 expects argv at exactly [rsp+8]
+  // with no gap.
+  if ((envc + argc) % 2 != 0) {
+    sp -= sizeof(uint64_t);
+  }
+
   // envp NULL
   sp -= sizeof(uint64_t);
   *(uint64_t *)sp = 0;
@@ -282,18 +321,11 @@ static uint64_t setup_user_stack(uint64_t stack_top, char **argv, char **envp) {
 
   uint64_t argv_addr = sp;
 
-  // argc
+  // argc -- lands at exactly the rsp we return, immediately below argv[0],
+  // and (per the padding above) satisfies the ABI's rsp % 16 == 8 at entry.
   sp -= sizeof(uint64_t);
 
   *(uint64_t *)sp = argc;
-
-  /*
-     entry:
-
-     rsp % 16 == 8
-  */
-
-  sp &= ~0xFULL;
 
   return sp;
 }
@@ -319,8 +351,6 @@ bool exec_current(const char *path, char **argv, char **envp) {
   if (!entry) {
 
     new_space->destroy();
-
-    logger::error("exec failed %s", path);
 
     return false;
   }
@@ -406,9 +436,6 @@ Registers *schedule(Registers *old) {
   if (current_task->process) {
     current_task->process->space->activate();
   }
-
-  logger::info("switch pid=%lu rip=%lx rsp=%lx cs=%lx", current_task->pid, current_task->regs->rip,
-               current_task->regs->rsp, current_task->regs->cs);
 
   return current_task->regs;
 }

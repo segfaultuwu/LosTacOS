@@ -14,7 +14,6 @@ uint64_t load(const char *path, mm::AddressSpace *space) {
   auto node = fs::vfs::find(path);
 
   if (!node) {
-    logger::error("ELF: %s not found", path);
     return 0;
   }
 
@@ -88,6 +87,9 @@ uint64_t load(const char *path, mm::AddressSpace *space) {
 
       uint64_t phys = (uint64_t)page;
 
+      paging::map_page(space->table->pml4, addr, phys, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
+      void *dst = page;
+
       uint64_t virt = addr;
 
       paging::map_page(pml4, virt, phys, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
@@ -107,7 +109,7 @@ uint64_t load(const char *path, mm::AddressSpace *space) {
         uint64_t page_off = copy_start - page_start;
         uint64_t len = copy_end - copy_start;
 
-        memcpy((uint8_t *)phys + page_off, data + file_off, len);
+        memcpy((uint8_t *)dst + page_off, data + file_off, len);
       }
     }
   }

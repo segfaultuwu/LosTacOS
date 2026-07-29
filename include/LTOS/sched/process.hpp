@@ -21,6 +21,10 @@ struct Process {
 
   mm::AddressSpace *space;
 
+  uint64_t mmap_next; // bump pointer for sys_mmap's per-process user-space
+                      // allocations; 0 until first use, then lazily
+                      // initialized to MMAP_BASE (see syscall.cpp)
+
   fs::vfs::Node *cwd;
 
   int exit_code;

@@ -1,4 +1,5 @@
 #include "LTOS/syscall.hpp"
+#include "LTOS/arch/x86_64/paging.hpp"
 #include "LTOS/drivers/console.hpp"
 #include "LTOS/drivers/framebuffer.hpp"
 #include "LTOS/drivers/serial.hpp"
@@ -302,20 +303,56 @@ static uint64_t sys_mmap(uint64_t a, uint64_t b) {
 
   size_t len = (size_t)b; // arg2: length
 
-  void *ptr = heap::kmalloc(len);
-
-  if (!ptr)
+  if (len == 0)
     return 0;
 
-  return (uint64_t)ptr;
+  sched::Task *task = sched::get_current();
+
+  if (!task || !task->process || !task->process->space || !task->process->space->table)
+    return 0;
+
+  sched::Process *proc = task->process;
+
+  // Bump-allocate out of the private per-process region (PDPT slot 1,
+  // 0x40000000-0x80000000 -- see paging.cpp) that elf::load() places the
+  // program's own image in. MMAP_BASE sits well above where any binary
+  // built with cfg/user.ld is going to reach, so it won't collide with
+  // the program image or its BSS.
+  constexpr uint64_t MMAP_BASE = 0x50000000;
+
+  if (!proc->mmap_next)
+    proc->mmap_next = MMAP_BASE;
+
+  uint64_t base = proc->mmap_next;
+  uint64_t pages = (len + 0xFFF) / 0x1000;
+
+  for (uint64_t i = 0; i < pages; i++) {
+    void *page = paging::alloc_page(); // zeroed already
+
+    if (!page)
+      return 0;
+
+    paging::map_page(proc->space->table->pml4, proc->mmap_next, (uint64_t)page,
+                     PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
+
+    proc->mmap_next += 0x1000;
+  }
+
+  return base;
 }
 
 static uint64_t sys_munmap(uint64_t ptr) {
   if (!ptr)
     return -1;
 
-  heap::kfree((void *)ptr);
-
+  // sys_mmap() now hands out pages mapped straight into the caller's own
+  // address space rather than a kernel-heap pointer, and nothing in this
+  // kernel reclaims individual physical pages once handed out (alloc_page()
+  // itself is a bump allocator with no free path either). So there is
+  // nothing safe to do here yet beyond accepting the call -- freeing the
+  // mapping would need a per-process allocator that can hand pages back,
+  // which doesn't exist. Leaving this a no-op avoids treating a user VA as
+  // a kernel heap pointer, which is what caused the previous crash.
   return 0;
 }
 

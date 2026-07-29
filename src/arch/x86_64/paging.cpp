@@ -3,6 +3,7 @@
 #include "LTOS/kernel.hpp"
 #include "LTOS/logger.hpp"
 #include "LTOS/mm/heap.hpp"
+#include <string.h>
 
 using page_t = uint64_t;
 
@@ -58,7 +59,7 @@ uint64_t PageTable::virt_to_phys(uint64_t virt) {
   uint64_t pd_i = (virt >> 21) & 0x1FF;
   uint64_t pt_i = (virt >> 12) & 0x1FF;
 
-  uint64_t *pdpt = (uint64_t *)(pml4[pml4_i] & ~0xFFF);
+  uint64_t *pdpt = (uint64_t *)(this->pml4[pml4_i] & ~0xFFF);
   if (!pdpt)
     return 0;
 
@@ -74,19 +75,14 @@ uint64_t PageTable::virt_to_phys(uint64_t virt) {
 }
 
 void *alloc_page() {
+
   uint64_t addr = next_free;
 
   next_free += 0x1000;
 
-  // for debugging
-  // kprintf("alloc=%x\n", addr);
+  memset((void *)addr, 0, 0x1000);
 
-  uint64_t *p = (uint64_t *)addr;
-
-  for (int i = 0; i < 512; i++)
-    p[i] = 0;
-
-  return p;
+  return (void *)addr;
 }
 
 void init() {
@@ -114,30 +110,41 @@ void map_page(uint64_t *pml4, uint64_t va, uint64_t pa, uint64_t flags) {
   uint64_t *pd;
   uint64_t *pt;
 
+  uint64_t upper_flags = PAGE_PRESENT | PAGE_WRITABLE;
+  if (flags & PAGE_USER)
+    upper_flags |= PAGE_USER;
+
+  // PML4
   if (!(pml4[pml4_i] & PAGE_PRESENT)) {
     pdpt = (uint64_t *)alloc_page();
-
-    pml4[pml4_i] = (uint64_t)pdpt | PAGE_PRESENT | PAGE_WRITABLE;
+    memset(pdpt, 0, 0x1000);
+    pml4[pml4_i] = (uint64_t)pdpt | upper_flags;
   } else {
     pdpt = (uint64_t *)(pml4[pml4_i] & ~0xFFF);
+    pml4[pml4_i] |= upper_flags;
   }
 
+  // PDPT
   if (!(pdpt[pdpt_i] & PAGE_PRESENT)) {
     pd = (uint64_t *)alloc_page();
-
-    pdpt[pdpt_i] = (uint64_t)pd | PAGE_PRESENT | PAGE_WRITABLE;
+    memset(pd, 0, 0x1000);
+    pdpt[pdpt_i] = (uint64_t)pd | upper_flags;
   } else {
     pd = (uint64_t *)(pdpt[pdpt_i] & ~0xFFF);
+    pdpt[pdpt_i] |= upper_flags;
   }
 
+  // PD
   if (!(pd[pd_i] & PAGE_PRESENT)) {
     pt = (uint64_t *)alloc_page();
-
-    pd[pd_i] = (uint64_t)pt | PAGE_PRESENT | PAGE_WRITABLE;
+    memset(pt, 0, 0x1000);
+    pd[pd_i] = (uint64_t)pt | upper_flags;
   } else {
     pt = (uint64_t *)(pd[pd_i] & ~0xFFF);
+    pd[pd_i] |= upper_flags;
   }
 
+  // PTE
   pt[pt_i] = (pa & ~0xFFF) | flags;
 }
 
@@ -219,6 +226,7 @@ void enable_paging() {
 
 uint64_t *create_address_space() {
   uint64_t *pml4 = (uint64_t *)alloc_page();
+  memset(pml4, 0, 0x1000);
 
   // Higher half: keep sharing directly with the kernel table (unused by
   // anything today, but preserved for whenever it is).
@@ -235,19 +243,14 @@ uint64_t *create_address_space() {
   // in, i.e. a completely different slot), and anything else the
   // kernel maps into its own table -- needs to stay shared, or a
   // process faults the moment it touches something like the console.
-  constexpr int USER_PDPT_SLOT = 0x40000000 >> 30;
+  constexpr int USER_PDPT_SLOT = 0;
 
   uint64_t *pdpt = (uint64_t *)alloc_page();
-
   uint64_t *kernel_pdpt = (uint64_t *)(kernel_pml4[0] & ~0xFFFULL);
 
   if (kernel_pdpt) {
-    for (int i = 0; i < 512; i++) {
-      if (i == USER_PDPT_SLOT)
-        continue; // left private/empty -- elf::load() populates this per process
-
+    for (int i = 0; i < 512; i++)
       pdpt[i] = kernel_pdpt[i];
-    }
   }
 
   pml4[0] = (uint64_t)pdpt | PAGE_PRESENT | PAGE_WRITABLE;
@@ -290,11 +293,12 @@ void clone_user_pages(uint64_t *dst_pml4, uint64_t *src_pml4) {
 
       void *dst_page = alloc_page();
 
-      // Physical == virtual for every page this OS hands out (all
-      // within the shared low identity map), so we can just read
-      // src_phys directly from kernel context.
+      uint64_t *src = (uint64_t *)(src_phys);
+
+      uint64_t *dst = (uint64_t *)dst_page;
+
       for (int w = 0; w < 512; w++)
-        ((uint64_t *)dst_page)[w] = ((uint64_t *)src_phys)[w];
+        dst[w] = src[w];
 
       map_page(dst_pml4, va, (uint64_t)dst_page, flags);
     }
