@@ -88,6 +88,8 @@ extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
   vmm::init(paging::kernel_pml4);
   logger::info("VMM Initialized");
 
+  paging::reserve_below(heap::HEAP_START + heap::HEAP_SIZE);
+
   paging::init();
   logger::info("Paging Initialized");
 
