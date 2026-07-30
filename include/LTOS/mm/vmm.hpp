@@ -1,11 +1,11 @@
 #pragma once
 
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 namespace vmm {
 struct VMRegion {
   uintptr_t start;
-  std::size_t size;
+  size_t size;
   uint64_t flags;
   VMRegion *next;
 };

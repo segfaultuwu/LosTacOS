@@ -5,17 +5,30 @@ extern exit
 section .text
 
 _start:
-    mov rdi, [rsp]        ; argc
-    lea rsi, [rsp+8]      ; argv
-    mov rdx, rsi
+    ; save initial stack
+    mov r12, rsp
 
-    mov rax, [rsp]
+    ; argc
+    mov rdi, [r12]
+
+    ; argv
+    lea rsi, [r12 + 8]
+
+    ; envp = argv + argc + 1
+    mov rdx, rsi
+    mov rax, [r12]
     inc rax
     shl rax, 3
     add rdx, rax
-    add rdx, 8            ; envp
+    add rdx, 8
+
+    ; SysV ABI stack alignment
+    and rsp, -16
 
     call main
 
     mov rdi, rax
     call exit
+
+.hang:
+    jmp .hang

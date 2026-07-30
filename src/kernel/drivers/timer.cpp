@@ -1,7 +1,7 @@
 #include "LTOS/drivers/timer.hpp"
 #include "LTOS/drivers/serial.hpp"
 #include "LTOS/logger.hpp"
-#include <cstdint>
+#include <stdint.h>
 
 namespace timer {
 

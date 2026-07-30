@@ -3,7 +3,7 @@
 #include "LTOS/drivers/serial.hpp"
 #include "LTOS/mm/heap.hpp"
 #include "multiboot.h"
-#include <cstdint>
+#include <stdint.h>
 #include <string.h>
 
 namespace framebuffer {

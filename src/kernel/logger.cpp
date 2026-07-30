@@ -2,7 +2,7 @@
 #include "LTOS/drivers/timer.hpp"
 #include "LTOS/lib/kprintf.h"
 
-#include <cstdint>
+#include <stdint.h>
 #include <stdarg.h>
 
 namespace logger {

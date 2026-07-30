@@ -17,12 +17,12 @@ void destroy_task(Task *task);
 // Boot-time only: spawns a brand-new process running `path`. Used to launch
 // the very first userspace process (init) when there is no current userspace
 // process to replace.
-void spawn(const char *path);
+Task *spawn(const char *path, char **argv);
 
 bool exec_current(const char *path, char **argv, char **envp);
 void yield();
 void idle();
-void exit();
+void exit(int code);
 
 Task *find(uint64_t pid);
 

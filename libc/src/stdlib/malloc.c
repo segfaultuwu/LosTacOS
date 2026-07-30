@@ -1,10 +1,11 @@
 #include <stddef.h>
-
-#include <stddef.h>
 #include <sys/syscall.h>
 
 void *malloc(size_t size) {
-  return (void *)syscall(SYS_MMAP, size, 0, 0);
+  if (size == 0)
+    return NULL;
+
+  return (void *)syscall(SYS_MMAP, 0, size, 0);
 }
 
 void free(void *ptr) {

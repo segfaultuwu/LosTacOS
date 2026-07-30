@@ -149,6 +149,14 @@ int kvsnprintf(char *buf, size_t size, const char *fmt, va_list args) {
       sn_print_number(sb, n, 16, width, zero);
       break;
     }
+    case 'p': {
+      uint64_t ptr = (uint64_t)va_arg(args, void *);
+
+      sn_puts(sb, "0x");
+      sn_print_number(sb, ptr, 16);
+
+      break;
+    }
     case '%':
       sn_putc(sb, '%');
       break;
@@ -317,6 +325,15 @@ void kvprintf(const char *fmt, va_list args) {
     case 'u': {
       uint64_t n = va_arg(args, uint64_t);
       print_number(n, 10, width, zero);
+      break;
+    }
+
+    case 'p': {
+      uint64_t ptr = (uint64_t)va_arg(args, void *);
+
+      print_string("0x");
+      print_number(ptr, 16);
+
       break;
     }
 

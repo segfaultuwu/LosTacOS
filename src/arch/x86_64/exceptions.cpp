@@ -3,7 +3,7 @@
 #include "LTOS/panic.hpp"
 #include "LTOS/sched/scheduler.hpp"
 
-#include <cstdint>
+#include <stdint.h>
 
 extern "C" void divide_error() {
   panic::halt("Divide by zero");
@@ -12,7 +12,7 @@ extern "C" void divide_error() {
 void handle_user_page_fault(uint64_t addr, uint64_t rip, uint64_t err) {
   logger::error("[TASK %d] SEGFAULT at %x (rip=%x)\n", sched::get_current()->pid, addr, rip);
 
-  sched::exit();
+  sched::exit(139);
 }
 
 extern "C" void unhandled_interrupt(uint64_t vector, uint64_t err, uint64_t addr, uint64_t rip) {

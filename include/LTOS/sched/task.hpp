@@ -50,6 +50,9 @@ struct Task {
 
   State state;
 
+  Task *parent;
+  int exit_code;
+
   Task *next;
 };
 

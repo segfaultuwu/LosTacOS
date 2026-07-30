@@ -1,6 +1,6 @@
 #include "LTOS/arch/x86_64/idt.hpp"
 #include "LTOS/drivers/pic.hpp"
-#include <cstdint>
+#include <stdint.h>
 
 namespace idt {
 

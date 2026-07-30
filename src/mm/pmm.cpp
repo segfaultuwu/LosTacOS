@@ -2,7 +2,7 @@
 #include "LTOS/kernel.hpp"
 #include "LTOS/lib/kprintf.h"
 
-#include <cstdint>
+#include <stdint.h>
 #include <multiboot.h>
 #include <stddef.h>
 #include <stdint.h>

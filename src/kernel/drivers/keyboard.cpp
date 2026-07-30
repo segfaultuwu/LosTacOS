@@ -2,7 +2,7 @@
 #include "LTOS/drivers/console.hpp"
 #include "LTOS/drivers/serial.hpp"
 #include "LTOS/lib/kprintf.h"
-#include <cstdint>
+#include <stdint.h>
 
 char stdin_buffer[256];
 volatile size_t stdin_len = 0;

@@ -4,7 +4,7 @@
 #include "LTOS/drivers/psf.hpp"
 #include "LTOS/drivers/serial.hpp"
 
-#include <cstdint>
+#include <stdint.h>
 #include <string.h>
 
 namespace console {

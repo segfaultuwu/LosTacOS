@@ -2,11 +2,11 @@
 #include <unistd.h>
 
 int open(const char *path) {
-  return (int)syscall(SYS_OPEN, (long)path, 0, 0);
+  return (int)syscall(SYS_OPEN, (long)path);
 }
 
 int close(int fd) {
-  return (int)syscall(SYS_CLOSE, fd, 0, 0);
+  return (int)syscall(SYS_CLOSE, fd);
 }
 
 ssize_t read(int fd, void *buf, size_t len) {
@@ -19,6 +19,14 @@ ssize_t write(int fd, const void *buf, size_t len) {
 
 int execve(const char *path, char *const argv[], char *const envp[]) {
   return syscall(SYS_EXECVE, (long)path, (long)argv, (long)envp);
+}
+
+int pipe(int pipefd[2]) {
+  return syscall(SYS_PIPE, pipefd);
+}
+
+int dup2(int oldfd, int newfd) {
+  return syscall(SYS_DUP2, oldfd, newfd);
 }
 
 pid_t getpid(void) {

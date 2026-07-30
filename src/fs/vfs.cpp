@@ -36,6 +36,9 @@ static char *strdup(const char *s) {
 void init() {
   root = (Node *)heap::kmalloc(sizeof(Node));
 
+  root->filesystem = nullptr;
+  root->mount_data = nullptr;
+
   root->name = strdup("/");
   root->directory = true;
   root->type = VFS_DIR;
@@ -47,7 +50,6 @@ void init() {
   root->file = nullptr;
 
   current_dir = root;
-  fs::devfs::init();
   state::vfs_initialized = true;
 }
 
@@ -64,13 +66,22 @@ Node *create_node(const char *name, bool directory, Node *parent) {
   node->file = nullptr;
   node->dev = nullptr;
 
+  node->filesystem = nullptr;
+  node->mount_data = nullptr;
+
   node->next = parent->children;
   parent->children = node;
 
   return node;
 }
 
-Node *create_dev(const char *name, devfs::DevOps *dev) {
+void mount_node(Node *node, fs::FileSystem *fs, void *data) {
+  node->type = VFS_MOUNT;
+  node->filesystem = fs;
+  node->mount_data = data;
+}
+
+Node *create_dev(const char *name, DevOps *dev) {
   Node *dev_dir = find("/dev");
 
   if (!dev_dir) {
@@ -91,7 +102,7 @@ size_t write(Node *node, const char *buf, size_t len) {
     return 0;
 
   if (node->dev) {
-    node->dev->write(buf, len);
+    node->dev->write(buf, len, 0);
     return len;
   }
 
@@ -305,6 +316,10 @@ Node *find(const char *path) {
         if (!node)
           return nullptr;
 
+        if (node->type == VFS_MOUNT) {
+          return node;
+        }
+
         // resolve symlinks
         int depth = 0;
 
@@ -321,13 +336,17 @@ Node *find(const char *path) {
 
           } else {
 
-            strcpy(target, "/");
+            // resolve relative to the symlink's parent *directory*, not
+            // just its immediate name -- node->parent->name is only one
+            // path component, so this used to break for any symlink
+            // nested more than one level deep.
+            const char *parent_path = node->parent ? get_path(node->parent) : "/";
 
-            // katalog rodzica symlinka
-            if (node->parent) {
-              strcat(target, node->parent->name);
+            strcpy(target, parent_path);
+
+            size_t tlen = strlen(target);
+            if (tlen == 0 || target[tlen - 1] != '/')
               strcat(target, "/");
-            }
 
             strcat(target, node->symlink);
           }
@@ -585,8 +604,12 @@ int read(Node *node, char *buf, int size) {
   if (!node)
     return -1;
 
+  if (node->type == VFS_MOUNT) {
+    return -1;
+  }
+
   if (node->type == VFS_DEV && node->dev && node->dev->read)
-    return node->dev->read(buf, size);
+    return node->dev->read(buf, size, 0);
 
   if (!node->directory && node->file && node->file->private_data) {
     int len = node->file->size < (size_t)size ? node->file->size : size;
@@ -605,7 +628,7 @@ int write(Node *node, const char *buf, int size) {
     return -1;
 
   if (node->type == VFS_DEV && node->dev && node->dev->write)
-    return node->dev->write(buf, size);
+    return node->dev->write(buf, size, 0);
 
   if (!node->directory)
     return write_content(node->name, buf, size) ? size : -1;

@@ -6,8 +6,10 @@ namespace tty {
 
 void init();
 
-void write(const char *buf, size_t len);
+size_t write(const char *buf, size_t len);
 
 size_t read(char *buf, size_t len);
+
+int ioctl(unsigned long req, void *arg);
 
 } // namespace tty

@@ -7,7 +7,7 @@
 #include "LTOS/sched/process.hpp"
 #include "LTOS/sched/task.hpp"
 
-#include <cstdint>
+#include <stdint.h>
 #include <string.h>
 
 namespace sched {
@@ -29,7 +29,7 @@ static void task_wrapper(void (*entry)()) {
 
   entry();
 
-  sched::exit();
+  sched::exit(1);
 
   while (true)
     asm volatile("hlt");
@@ -37,7 +37,7 @@ static void task_wrapper(void (*entry)()) {
 
 uint64_t create_user_stack(mm::AddressSpace *space) {
 
-  uint64_t stack_top = 0x7fffff7000;
+  uint64_t stack_top = 0x8000000000;
   uint64_t stack_size = 0x10000; // 64KB
 
   void *top_page = nullptr;
@@ -179,55 +179,6 @@ void create(uint64_t entry) {
   create_process(entry);
 }
 
-void spawn(const char *path) {
-  Process *proc = (Process *)heap::kmalloc(sizeof(Process));
-
-  if (!proc)
-    return;
-
-  memset(proc, 0, sizeof(Process));
-
-  proc->pid = pid_counter++;
-
-  proc->space = mm::AddressSpace::create();
-
-  if (!proc->space) {
-    heap::kfree(proc);
-    return;
-  }
-
-  uint64_t entry = elf::load(path, proc->space);
-
-  // Note: the user stack is set up inside create_task() -> create_user_stack()
-  // below; it used to also be mapped here, but that just leaked the physical
-  // pages allocated for it since create_task() maps the same virtual range
-  // again right after.
-
-  if (!entry) {
-
-    proc->space->destroy();
-
-    heap::kfree(proc);
-
-    logger::error("spawn failed %s", path);
-
-    return;
-  }
-
-  Task *task = create_task(proc, entry);
-
-  if (!task) {
-
-    proc->space->destroy();
-
-    heap::kfree(proc);
-
-    return;
-  }
-
-  proc->main_thread = task;
-}
-
 static uint64_t setup_user_stack(uint64_t stack_top, char **argv, char **envp) {
   uint64_t sp = stack_top;
 
@@ -332,6 +283,17 @@ static uint64_t setup_user_stack(uint64_t stack_top, char **argv, char **envp) {
 
 extern "C" void exec_enter(Registers *r);
 
+static char *kstrdup(const char *s) {
+  size_t len = strlen(s) + 1;
+
+  char *out = (char *)heap::kmalloc(len);
+
+  if (out)
+    memcpy(out, s, len);
+
+  return out;
+}
+
 bool exec_current(const char *path, char **argv, char **envp) {
 
   Task *task = current_task;
@@ -340,6 +302,27 @@ bool exec_current(const char *path, char **argv, char **envp) {
     return false;
 
   Process *proc = task->process;
+
+  // argv/envp are user-space pointers that only make sense in the
+  // CALLING process's address space, which we're about to tear down and
+  // replace below. Copy everything into kernel memory now, while those
+  // mappings are still active -- reading them after the switch would
+  // dereference stale pointers into an address space that no longer
+  // backs them (silently, since the old and new stacks happen to sit at
+  // the same fixed VA, so this used to just read back garbage/zeroes
+  // instead of faulting).
+  char *argv_copy[64] = {};
+  char *envp_copy[64] = {};
+
+  if (argv) {
+    for (int i = 0; argv[i] && i < 63; i++)
+      argv_copy[i] = kstrdup(argv[i]);
+  }
+
+  if (envp) {
+    for (int i = 0; envp[i] && i < 63; i++)
+      envp_copy[i] = kstrdup(envp[i]);
+  }
 
   mm::AddressSpace *new_space = mm::AddressSpace::create();
 
@@ -365,12 +348,9 @@ bool exec_current(const char *path, char **argv, char **envp) {
     old_space->destroy();
 
   uint64_t stack_top = create_user_stack(proc->space);
-
-  uint64_t stack = create_user_stack(proc->space);
-  stack = setup_user_stack(stack, nullptr, nullptr);
   stack_top &= ~0xFULL;
 
-  uint64_t user_stack = setup_user_stack(stack_top, argv, envp);
+  uint64_t user_stack = setup_user_stack(stack_top, argv_copy, envp_copy);
 
   Registers *r = (Registers *)(task->stack + 8192 - sizeof(Registers));
 
@@ -378,7 +358,7 @@ bool exec_current(const char *path, char **argv, char **envp) {
 
   r->rip = entry;
 
-  r->rsp = stack;
+  r->rsp = user_stack;
 
   r->cs = 0x1B;
   r->ss = 0x23;
@@ -453,21 +433,52 @@ Task *find(uint64_t pid) {
   return nullptr;
 }
 
+Task *spawn(const char *path, char **argv) {
+  Process *proc = (Process *)heap::kmalloc(sizeof(Process));
+  if (!proc)
+    return nullptr;
+
+  memset(proc, 0, sizeof(Process));
+
+  proc->pid = pid_counter++;
+
+  proc->space = mm::AddressSpace::create();
+  if (!proc->space)
+    return nullptr;
+
+  uint64_t entry = elf::load(path, proc->space);
+  if (!entry)
+    return nullptr;
+
+  Task *task = create_task(proc, entry);
+  if (!task)
+    return nullptr;
+
+  task->state = State::READY;
+  task->parent = current_task;
+  task->exit_code = 0;
+
+  task->next = head;
+  head = task;
+
+  return task;
+}
+
 void yield() {
   asm volatile("int $32");
 }
 
-void exit() {
-  if (!current_task || current_task->pid == 0)
-    return;
+void exit(int code) {
 
+  current_task->exit_code = code;
   current_task->state = State::DEAD;
 
-  if (current_task->process && current_task->process->space) {
-    current_task->process->space->destroy();
+  if (current_task->parent && current_task->parent->state == State::BLOCKED) {
+
+    current_task->parent->state = State::READY;
   }
 
-  asm volatile("int $32");
+  schedule(current_task->regs);
 
   while (1)
     asm volatile("hlt");

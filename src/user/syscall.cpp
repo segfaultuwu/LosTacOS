@@ -4,6 +4,7 @@
 #include "LTOS/drivers/framebuffer.hpp"
 #include "LTOS/drivers/serial.hpp"
 #include "LTOS/drivers/timer.hpp"
+#include "LTOS/drivers/tty.hpp"
 #include "LTOS/drivers/tty/ioctl.hpp"
 #include "LTOS/fs/vfs.hpp"
 #include "LTOS/lib/kprintf.h"
@@ -12,26 +13,59 @@
 #include "LTOS/sched/scheduler.hpp"
 #include "LTOS/sched/task.hpp"
 #include "sys/time.h"
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 
 namespace {
 
 constexpr int MAX_FDS = 32;
 
-struct FdEntry {
-  fs::vfs::Node *node = nullptr;
-  size_t offset = 0;
+enum FDType { FD_NONE, FD_FILE, FD_PIPE };
+
+struct Pipe {
+  char buffer[4096];
+
+  size_t read_pos;
+  size_t write_pos;
+
+  int readers;
+  int writers;
 };
+
+struct FdEntry {
+  FDType type = FD_NONE;
+
+  fs::vfs::Node *node = nullptr;
+
+  Pipe *pipe = nullptr;
+
+  fs::Mount *mount = nullptr;
+  void *fs_handle = nullptr;
+
+  size_t offset = 0;
+
+  bool readable = false;
+  bool writable = false;
+};
+
+static Pipe pipes[32];
+static bool pipe_used[32];
 
 FdEntry fd_table[MAX_FDS];
 
 int alloc_fd(fs::vfs::Node *node) {
   for (int fd = 3; fd < MAX_FDS; fd++) {
-    if (!fd_table[fd].node) {
+
+    if (fd_table[fd].type == FD_NONE) {
+
+      memset(&fd_table[fd], 0, sizeof(FdEntry));
+
       fd_table[fd].node = node;
-      fd_table[fd].offset = 0;
+
+      if (node)
+        fd_table[fd].type = FD_FILE;
+
       return fd;
     }
   }
@@ -40,10 +74,67 @@ int alloc_fd(fs::vfs::Node *node) {
 }
 
 bool valid_fd(int fd) {
-  return fd >= 3 && fd < MAX_FDS && fd_table[fd].node != nullptr;
+  return fd >= 0 && fd < MAX_FDS && fd_table[fd].type != FD_NONE;
 }
 
 } // namespace
+
+static uint64_t sys_pipe(uint64_t arg) {
+  int *fds = (int *)arg;
+
+  if (!fds)
+    return -1;
+
+  for (int i = 0; i < 32; i++) {
+    if (!pipe_used[i]) {
+      pipe_used[i] = true;
+
+      Pipe *p = &pipes[i];
+
+      memset(p, 0, sizeof(Pipe));
+
+      p->readers = 1;
+      p->writers = 1;
+
+      int rfd = -1;
+      int wfd = -1;
+
+      for (int j = 3; j < MAX_FDS; j++) {
+        if (fd_table[j].type == FD_NONE) {
+          rfd = j;
+          break;
+        }
+      }
+
+      for (int j = 3; j < MAX_FDS; j++) {
+        if (fd_table[j].type == FD_NONE && j != rfd) {
+          wfd = j;
+          break;
+        }
+      }
+
+      if (rfd < 0 || wfd < 0)
+        return -1;
+
+      fd_table[rfd].type = FD_PIPE;
+      fd_table[rfd].pipe = p;
+      fd_table[rfd].readable = true;
+      fd_table[rfd].writable = false;
+
+      fd_table[wfd].type = FD_PIPE;
+      fd_table[wfd].pipe = p;
+      fd_table[wfd].readable = false;
+      fd_table[wfd].writable = true;
+
+      fds[0] = rfd;
+      fds[1] = wfd;
+
+      return 0;
+    }
+  }
+
+  return -1;
+}
 
 static uint64_t sys_write(uint64_t a, uint64_t b, uint64_t c) {
   int fd = (int)a;
@@ -53,22 +144,36 @@ static uint64_t sys_write(uint64_t a, uint64_t b, uint64_t c) {
   if (!buf || len == 0)
     return 0;
 
-  if (fd == 1 || fd == 2) {
-    console::write(buf, len);
-
-    for (size_t i = 0; i < len; i++)
-      drivers::serial::write(buf[i]);
-
-    return len;
-  }
+  if (fd == 1 || fd == 2)
+    return tty::write(buf, len);
 
   if (!valid_fd(fd))
     return (uint64_t)-1;
 
+  FdEntry &entry = fd_table[fd];
+
+  if (entry.type == FD_PIPE) {
+    if (!entry.writable)
+      return -1;
+
+    Pipe *p = entry.pipe;
+
+    size_t written = 0;
+
+    while (written < len) {
+      if (p->write_pos >= sizeof(p->buffer))
+        break;
+
+      p->buffer[p->write_pos++] = buf[written++];
+    }
+
+    return written;
+  }
+
   fs::vfs::Node *node = fd_table[fd].node;
 
   if (node->dev && node->dev->write)
-    return node->dev->write(buf, len);
+    return node->dev->write(buf, len, fd_table[fd].offset);
 
   // idk why it does not render without it, it's already in console::write lol
   framebuffer::swap();
@@ -76,50 +181,47 @@ static uint64_t sys_write(uint64_t a, uint64_t b, uint64_t c) {
   return (uint64_t)-1;
 }
 
-extern volatile size_t stdin_len;
-extern char stdin_buffer[256];
-
 static uint64_t sys_read(uint64_t a, uint64_t b, uint64_t c) {
   int fd = a;
   char *buf = (char *)b;
   size_t len = c;
 
-  if (fd == 0) {
-    size_t n = 0;
-
-    while (n < len) {
-      if (stdin_len == 0) {
-        asm volatile("sti; hlt; cli");
-        continue;
-      }
-
-      buf[n++] = stdin_buffer[0];
-
-      for (size_t i = 1; i < stdin_len; i++)
-        stdin_buffer[i - 1] = stdin_buffer[i];
-
-      stdin_len--;
-
-      char echoed = buf[n - 1];
-
-      console::put_swap(echoed);
-      drivers::serial::write(echoed);
-
-      if (echoed == '\n')
-        break;
-    }
-
-    return n;
-  }
+  if (fd == 0)
+    return tty::read(buf, len);
 
   if (!valid_fd(fd))
     return (uint64_t)-1;
 
   FdEntry &entry = fd_table[fd];
+
+  if (!entry.node && entry.mount && entry.fs_handle) {
+
+    return entry.mount->fs->read(entry.fs_handle, buf, len);
+  }
+
+  if (entry.type == FD_PIPE) {
+    if (!entry.readable)
+      return -1;
+
+    Pipe *p = entry.pipe;
+
+    while (p->read_pos >= p->write_pos) {
+      asm volatile("sti; hlt; cli");
+    }
+
+    size_t n = 0;
+
+    while (n < len && p->read_pos < p->write_pos) {
+      buf[n++] = p->buffer[p->read_pos++];
+    }
+
+    return n;
+  }
+
   fs::vfs::Node *node = entry.node;
 
   if (node->dev && node->dev->read)
-    return node->dev->read(buf, len);
+    return node->dev->read(buf, len, fd_table[fd].offset);
 
   if (!node->directory && node->file && node->file->read) {
     node->file->offset = entry.offset;
@@ -153,27 +255,67 @@ static uint64_t sys_read(uint64_t a, uint64_t b, uint64_t c) {
 static uint64_t sys_open(uint64_t a) {
   const char *path = (const char *)a;
 
-  if (!path)
-    return (uint64_t)-1;
+  fs::Mount *mnt = fs::find_mount(path);
+
+  if (mnt) {
+    const char *sub = path + strlen(mnt->path);
+
+    while (*sub == '/')
+      sub++;
+
+    if (*sub) {
+      void *handle = mnt->fs->open(mnt->data, sub);
+
+      if (handle) {
+        int fd = alloc_fd(nullptr);
+
+        if (fd >= 0) {
+          fd_table[fd].type = FD_FILE;
+          fd_table[fd].fs_handle = handle;
+          fd_table[fd].mount = mnt;
+          return fd;
+        }
+      }
+
+      return -1;
+    }
+
+    // opening the mount point itself (e.g. "/dev", "/proc") -- fall
+    // through to the plain vfs node below so directory listing works.
+  }
 
   fs::vfs::Node *node = fs::vfs::find(path);
 
   if (!node)
-    return (uint64_t)-1;
+    return -1;
 
-  int fd = alloc_fd(node);
-
-  return fd < 0 ? (uint64_t)-1 : (uint64_t)fd;
+  return alloc_fd(node);
 }
 
 static uint64_t sys_close(uint64_t a) {
-  int fd = (int)a;
+  int fd = a;
 
   if (!valid_fd(fd))
-    return (uint64_t)-1;
+    return -1;
 
-  fd_table[fd].node = nullptr;
-  fd_table[fd].offset = 0;
+  FdEntry &entry = fd_table[fd];
+
+  if (entry.type == FD_PIPE) {
+    if (entry.readable)
+      entry.pipe->readers--;
+
+    if (entry.writable)
+      entry.pipe->writers--;
+
+    if (entry.pipe->readers == 0 && entry.pipe->writers == 0) {
+      for (int i = 0; i < 32; i++) {
+        if (&pipes[i] == entry.pipe)
+          pipe_used[i] = false;
+      }
+    }
+  }
+
+  memset(&entry, 0, sizeof(FdEntry));
 
   return 0;
 }
@@ -221,6 +363,10 @@ static uint64_t sys_lseek(uint64_t a, uint64_t b, uint64_t c) {
     return (uint64_t)-1;
 
   FdEntry &entry = fd_table[fd];
+
+  if (entry.type == FD_PIPE)
+    return -1;
+
   fs::vfs::Node *node = entry.node;
 
   size_t size = node->file ? node->file->size : 0;
@@ -257,6 +403,9 @@ static uint64_t sys_fsize(uint64_t a) {
   if (!valid_fd(fd))
     return (uint64_t)-1;
 
+  if (fd_table[fd].type == FD_PIPE)
+    return 0;
+
   fs::vfs::Node *node = fd_table[fd].node;
 
   return node->file ? node->file->size : 0;
@@ -273,6 +422,21 @@ static uint64_t sys_wait(uint64_t a) {
 
     asm volatile("sti; hlt; cli");
   }
+}
+
+static uint64_t sys_dup2(uint64_t a, uint64_t b) {
+  int oldfd = a;
+  int newfd = b;
+
+  if (!valid_fd(oldfd))
+    return -1;
+
+  if (newfd < 0 || newfd >= MAX_FDS)
+    return -1;
+
+  fd_table[newfd] = fd_table[oldfd];
+
+  return newfd;
 }
 
 static uint64_t sys_fork() {
@@ -367,7 +531,7 @@ static uint64_t sys_readdir(uint64_t a, uint64_t b) {
 
   auto *dir = entry.node;
 
-  if (!dir->directory)
+  if (!dir || !dir->directory)
     return (uint64_t)-1;
 
   auto *child = dir->children;
@@ -471,7 +635,7 @@ extern "C" uint64_t syscall_handler(uint64_t num, uint64_t a, uint64_t b, uint64
     return sys_fork();
 
   case SYS_EXIT:
-    sched::exit();
+    sched::exit(a);
     return 0;
 
   case SYS_GETPID:
@@ -494,6 +658,12 @@ extern "C" uint64_t syscall_handler(uint64_t num, uint64_t a, uint64_t b, uint64
 
   case SYS_NANOSLEEP:
     return sys_sleep(a);
+
+  case SYS_PIPE:
+    return sys_pipe(a);
+
+  case SYS_DUP2:
+    return sys_dup2(a, b);
 
   case SYS_IOCTL:
     return sys_ioctl(a, b, c);

@@ -1,6 +1,6 @@
 #include "LTOS/drivers/serial.hpp"
 #include "LTOS/lib/kprintf.h"
-#include <cstdarg>
+#include <stdarg.h>
 
 namespace drivers::serial {
 

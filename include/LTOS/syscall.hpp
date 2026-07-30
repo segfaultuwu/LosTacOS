@@ -20,7 +20,12 @@ enum Syscall {
 
   SYS_IOCTL = 16,
 
-  SYS_GETTIMEOFDAY = 17,
+  SYS_GETTIMEOFDAY = 96,
+
+  SYS_DUP = 32,
+  SYS_DUP2 = 33,
+
+  SYS_NANOSLEEP = 35,
 
   SYS_GETPID = 39,
 
@@ -29,17 +34,25 @@ enum Syscall {
   SYS_EXIT = 60,
   SYS_WAIT4 = 61,
 
-  SYS_NANOSLEEP = 35,
+  /*
+   * Linux compatible additions
+   */
+
+  SYS_PIPE = 293, // pipe2
 
   /*
    * LosTacOS extensions
    * not used by Linux programs
    */
+
   SYS_SLEEP = 499,
+
   SYS_READDIR = 500,
   SYS_OPENDIR = 501,
   SYS_CLOSEDIR = 502,
+
   SYS_FSIZE = 503,
+
   SYS_YIELD = 504,
 
 };

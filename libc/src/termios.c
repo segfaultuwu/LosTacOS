@@ -1,30 +1,13 @@
 #include <sys/ioctl.h>
 #include <termios.h>
+#include <unistd.h>
 
-int tcgetattr(int fd, struct termios *term) {
-  return ioctl(fd, TCGETS, term);
+int tcgetattr(int fd, struct termios *t) {
+  return ioctl(fd, TCGETS, t);
 }
 
-int tcsetattr(int fd, int optional_actions, const struct termios *term) {
+int tcsetattr(int fd, int optional_actions, const struct termios *t) {
   (void)optional_actions;
 
-  return ioctl(fd, TCSETS, (void *)term);
-}
-
-speed_t cfgetispeed(const struct termios *term) {
-  return term->c_ispeed;
-}
-
-speed_t cfgetospeed(const struct termios *term) {
-  return term->c_ospeed;
-}
-
-int cfsetispeed(struct termios *term, speed_t speed) {
-  term->c_ispeed = speed;
-  return 0;
-}
-
-int cfsetospeed(struct termios *term, speed_t speed) {
-  term->c_ospeed = speed;
-  return 0;
+  return ioctl(fd, TCSETS, (void *)t);
 }

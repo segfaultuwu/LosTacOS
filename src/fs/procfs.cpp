@@ -1,110 +1,139 @@
 #include "LTOS/fs/procfs.hpp"
 #include "LTOS/drivers/timer.hpp"
+#include "LTOS/fs/fs.hpp"
 #include "LTOS/fs/vfs.hpp"
 #include "LTOS/lib/kprintf.h"
 #include "LTOS/mm/heap.hpp"
-#include "LTOS/sched/scheduler.hpp"
 #include "LTOS_gen/version.h"
 
-#include <cstdint>
 #include <string.h>
 
 namespace fs::procfs {
 
-static int read_string(fs::vfs::File *file, uint8_t *buffer, size_t size, const char *text) {
-  size_t len = strlen(text);
+struct ProcEntry {
+  const char *name;
+  const char *(*generate)();
+};
 
-  if (file->offset >= len)
-    return 0;
+static char buffer[128];
 
-  size_t remaining = len - file->offset;
-
-  size_t n = remaining < size ? remaining : size;
-
-  memcpy(buffer, text + file->offset, n);
-
-  file->offset += n;
-
-  return n;
+static const char *get_version() {
+  return "LosTacOS v" LTOS_VERSION;
 }
 
-static int read_version(fs::vfs::File *file, uint8_t *buffer, size_t size) {
-  return read_string(file, buffer, size, LTOS_VERSION "\n");
+static const char *get_uptime() {
+  ksnprintf(buffer, sizeof(buffer), "%lu", timer::get_uptime_ms());
+
+  return buffer;
 }
 
-static int read_uptime(fs::vfs::File *file, uint8_t *buffer, size_t size) {
-  static char uptime[64];
+static ProcEntry entries[] = {{"version", get_version}, {"uptime", get_uptime}, {nullptr, nullptr}};
 
-  uint64_t sec = timer::get_uptime_sec();
+struct ProcFile {
+  char *data;
+  size_t offset;
+  size_t size;
+};
 
-  int len = ksnprintf(uptime, sizeof(uptime), "%lu", sec);
+static void *open(void *, const char *path) {
+  for (int i = 0; entries[i].name; i++) {
 
-  if (file->offset >= (size_t)len)
-    return 0;
+    if (strcmp(path, entries[i].name) == 0) {
 
-  size_t n = len - file->offset;
+      ProcFile *file = (ProcFile *)heap::kmalloc(sizeof(ProcFile));
 
-  if (n > size)
-    n = size;
+      if (!file)
+        return nullptr;
 
-  memcpy(buffer, uptime + file->offset, n);
+      const char *generated = entries[i].generate();
 
-  file->offset += n;
+      size_t len = strlen(generated);
 
-  return n;
-}
+      file->data = (char *)heap::kmalloc(len + 1);
 
-static int read_uptime_ms(fs::vfs::File *file, uint8_t *buffer, size_t size) {
-  static char uptime[64];
+      if (!file->data) {
+        heap::kfree(file);
+        return nullptr;
+      }
 
-  uint64_t sec = timer::get_uptime_ms();
+      memcpy(file->data, generated, len);
+      file->data[len] = 0;
 
-  int len = ksnprintf(uptime, sizeof(uptime), "%lu", sec);
+      file->size = len;
+      file->offset = 0;
 
-  if (file->offset >= (size_t)len)
-    return 0;
-
-  size_t n = len - file->offset;
-
-  if (n > size)
-    n = size;
-
-  memcpy(buffer, uptime + file->offset, n);
-
-  file->offset += n;
-
-  return n;
-}
-
-static fs::vfs::Node *make_proc_file(const char *path,
-                                     int (*read_fn)(fs::vfs::File *, uint8_t *, size_t)) {
-  auto *node = fs::vfs::create_file_path(path);
-
-  if (!node) {
-    kprintf("procfs: failed to create %s\n", path);
-    return nullptr;
+      return file;
+    }
   }
 
-  node->file = (fs::vfs::File *)heap::kmalloc(sizeof(fs::vfs::File));
-
-  node->file->size = 0;
-  node->file->offset = 0;
-  node->file->private_data = nullptr;
-  node->file->read = read_fn;
-  node->file->write = nullptr;
-
-  return node;
+  return nullptr;
 }
 
-void init() {
+static int read(void *ptr, char *buf, size_t size) {
+  ProcFile *file = (ProcFile *)ptr;
+
+  if (!file || !buf)
+    return -1;
+
+  if (file->offset >= file->size)
+    return 0;
+
+  size_t remaining = file->size - file->offset;
+
+  size_t n = size < remaining ? size : remaining;
+
+  memcpy(buf, file->data + file->offset, n);
+
+  file->offset += n;
+
+  return n;
+}
+
+static void close(void *ptr) {
+  ProcFile *file = (ProcFile *)ptr;
+
+  if (!file)
+    return;
+
+  heap::kfree(file->data);
+  heap::kfree(file);
+}
+
+static void list(void *) {
+  for (int i = 0; entries[i].name; i++)
+    kprintf("%s\n", entries[i].name);
+}
+
+static bool init(fs::FileSystem *fs) {
   kprintf("procfs init\n");
 
-  fs::vfs::create_dir_path("/proc");
+  // Give /proc real vfs children for each entry (mirroring how devfs
+  // registers a node per device) so directory listing works: readdir
+  // walks node->children, and until now /proc never had any.
+  vfs::Node *proc_dir = vfs::find("/proc");
 
-  make_proc_file("/proc/version", read_version);
+  if (proc_dir) {
+    for (int i = 0; entries[i].name; i++)
+      vfs::create_node(entries[i].name, false, proc_dir);
+  }
 
-  make_proc_file("/proc/uptime", read_uptime);
-  make_proc_file("/proc/uptime_ms", read_uptime_ms);
+  return true;
 }
+
+FileSystem filesystem = {
+
+    .name = "procfs",
+
+    .init = init,
+
+    .open = open,
+
+    .read = read,
+
+    .write = nullptr,
+
+    .close = close,
+
+    .list = list};
 
 } // namespace fs::procfs

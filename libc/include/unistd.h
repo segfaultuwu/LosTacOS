@@ -54,6 +54,9 @@ int sys_readdir(int fd, struct dirent *ent);
 
 ssize_t write(int fd, const void *buf, size_t count);
 
+int pipe(int pipefd[2]);
+int dup2(int oldfd, int newfd);
+
 /* process */
 
 void exit(int status);

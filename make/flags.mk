@@ -7,7 +7,6 @@ COMMON_FLAGS = \
 	-mno-avx \
 	-mgeneral-regs-only
 
-
 LIBC_FLAGS = \
 	-msse \
 	-msse2 \
@@ -36,6 +35,7 @@ CXXFLAGS = \
 	-mcmodel=kernel \
 	-fno-pic \
 	-Iinclude \
+	-Ilibc/include \
 	-I$(BUILD)/generated \
 	$(OPT) \
 	-MMD -MP
@@ -45,6 +45,7 @@ CFLAGS = \
 	-std=c23 \
 	$(COMMON_FLAGS) \
 	-Iinclude \
+	-Ilibc/include \
 	$(OPT) \
 	-MMD -MP
 

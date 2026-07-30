@@ -1,7 +1,9 @@
 #pragma once
 
+#include "LTOS/fs/fs.hpp"
+
 namespace fs::procfs {
 
-void init();
+extern FileSystem filesystem;
 
-}
+} // namespace fs::procfs

@@ -5,9 +5,9 @@ int main() {
   char *motd = "Hello, LosTacOS!";
   printf("%s\n", motd);
 
-  int fd = open("/proc/uptime_ms");
+  int fd = open("/proc/uptime");
   if (fd < 0) {
-    printf("open(\"/proc/uptime_ms\") failed\n");
+    printf("open(\"/proc/uptime\") failed\n");
   } else {
     char buf[256];
     long n = read(fd, buf, sizeof(buf) - 1);

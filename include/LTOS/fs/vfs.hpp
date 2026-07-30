@@ -1,13 +1,15 @@
 #pragma once
 
+#include "LTOS/fs/fs.hpp"
 #include <stddef.h>
 #include <stdint.h>
 
 namespace fs::vfs {
 
 struct DevOps {
-  size_t (*write)(const char *buf, size_t len);
-  size_t (*read)(char *buf, size_t len);
+  size_t (*write)(const char *buf, size_t len, size_t offset);
+  size_t (*read)(char *buf, size_t len, size_t offset);
+  int (*ioctl)(unsigned long req, void *arg);
 };
 
 struct File {
@@ -21,7 +23,7 @@ struct File {
   int (*write)(File *file, const uint8_t *buffer, size_t size);
 };
 
-enum NodeType { VFS_FILE, VFS_DIR, VFS_DEV, VFS_TAR, VFS_SYMLINK };
+enum NodeType { VFS_FILE, VFS_DIR, VFS_DEV, VFS_SYMLINK, VFS_MOUNT };
 
 struct Node {
 
@@ -36,6 +38,9 @@ struct Node {
   Node *children;
 
   char *symlink;
+
+  FileSystem *filesystem;
+  void *mount_data;
 
   File *file;
   DevOps *dev;
@@ -85,7 +90,7 @@ char *get_path(Node *node);
 
 // Current path shit idk how to explain properly
 Node *get_current();
-Node *set_current();
+void set_current(Node *node);
 
 Node *create_file(const char *name);
 

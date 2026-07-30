@@ -8,14 +8,16 @@
 
 LosTacOS is a simple operating system written in C/C++/NASM. It is designed to be a minimalistic operating system that can run on x86_64 architecture. It is not intended to be a full-fledged operating system, but rather a learning tool for those interested in operating system development.
 
+## Userspace
+
+Here is the kernel code. the busybox-like shit is [here](https://github.com/segfaultuwu/losbox)
+
 ## Features
 
 - **vfs** - virtual file system
 - **paging** - memory management
 - **heap** - memory management
 - **drivers** - keyboard, mouse, framebuffer, (now deprecated) vga, serial, etc.
-- ~~**shell**~~ - (in progress)
-- **userspace** - (in progress)
 - **AND MORE**!
 
 ## Requirements

@@ -4,7 +4,7 @@
 #include "LTOS/logger.hpp"
 #include "LTOS/mm/heap.hpp"
 
-#include <cstdint>
+#include <stdint.h>
 #include <string.h>
 
 namespace elf {

@@ -1,7 +1,7 @@
 #pragma once
 
-#include <cstdarg>
-#include <cstddef>
+#include <stdarg.h>
+#include <stddef.h>
 
 void kprintf(const char *format, ...);
 void kvprintf(const char *fmt, va_list args);
