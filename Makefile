@@ -1,9 +1,11 @@
+.DEFAULT_GOAL := iso
+
 include make/config.mk
 include make/paths.mk
 include make/flags.mk
 
-include make/version.mk
 include make/kernel.mk
+include make/version.mk
 include make/libc.mk
 include make/rootfs.mk
 include make/iso.mk

@@ -11,8 +11,12 @@ void create(uint64_t entry);
 Registers *schedule(Registers *current);
 
 Task *get_current();
+extern Task *head;
 
 void destroy_task(Task *task);
+void remove_and_destroy(Task *task);
+
+extern "C" void set_current_regs(Registers *r);
 
 // Boot-time only: spawns a brand-new process running `path`. Used to launch
 // the very first userspace process (init) when there is no current userspace

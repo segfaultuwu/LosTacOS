@@ -61,4 +61,8 @@ Mount *find_mount(const char *path) {
   return best;
 }
 
+Mount *get_mounts() {
+  return mounts;
+}
+
 } // namespace fs

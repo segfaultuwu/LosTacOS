@@ -61,7 +61,7 @@ static size_t read_canonical(char *buf, size_t len) {
 
   while (n < len) {
     if (stdin_len == 0) {
-      asm volatile("sti; hlt; cli");
+      asm volatile("sti; hlt");
       continue;
     }
 
@@ -98,7 +98,7 @@ static size_t read_raw(char *buf, size_t len) {
       return 0;
 
     while (stdin_len == 0)
-      asm volatile("sti; hlt; cli");
+      asm volatile("sti; hlt");
   }
 
   size_t n = 0;

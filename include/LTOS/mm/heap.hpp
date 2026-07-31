@@ -5,7 +5,7 @@
 
 namespace heap {
 
-struct Block {
+struct alignas(16) Block {
   size_t size;
   bool free;
   Block *next;

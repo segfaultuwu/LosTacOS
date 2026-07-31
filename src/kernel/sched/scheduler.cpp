@@ -1,4 +1,5 @@
 #include "LTOS/sched/scheduler.hpp"
+#include "LTOS/arch/x86_64/gdt.hpp"
 #include "LTOS/arch/x86_64/paging.hpp"
 #include "LTOS/exec/elf.hpp"
 #include "LTOS/logger.hpp"
@@ -12,7 +13,7 @@
 
 namespace sched {
 
-static Task *head = nullptr;
+Task *head = nullptr;
 static Task *current_task = nullptr;
 
 static uint64_t pid_counter = 1;
@@ -129,6 +130,8 @@ static Task *create_task(Process *proc, uint64_t entry) {
   task->state = State::READY;
 
   task->process = proc;
+  if (!proc->main_thread)
+    proc->main_thread = task;
 
   task->next = nullptr;
 
@@ -182,8 +185,8 @@ void create(uint64_t entry) {
 static uint64_t setup_user_stack(uint64_t stack_top, char **argv, char **envp) {
   uint64_t sp = stack_top;
 
-  char *argv_ptrs[64];
-  char *env_ptrs[64];
+  char *argv_ptrs[64] = {};
+  char *env_ptrs[64] = {};
 
   int argc = 0;
   int envc = 0;
@@ -191,15 +194,10 @@ static uint64_t setup_user_stack(uint64_t stack_top, char **argv, char **envp) {
   // copy string envp
   if (envp) {
     while (envp[envc] && envc < 63) {
-
       size_t len = strlen(envp[envc]) + 1;
-
       sp -= len;
-
       memcpy((void *)sp, envp[envc], len);
-
       env_ptrs[envc] = (char *)sp;
-
       envc++;
     }
   }
@@ -207,41 +205,22 @@ static uint64_t setup_user_stack(uint64_t stack_top, char **argv, char **envp) {
   // copy string argv
   if (argv) {
     while (argv[argc] && argc < 63) {
-
       size_t len = strlen(argv[argc]) + 1;
-
       sp -= len;
-
       memcpy((void *)sp, argv[argc], len);
-
       argv_ptrs[argc] = (char *)sp;
-
       argc++;
     }
   }
 
-  /*
-      SysV ABI:
-
-      argc
-      argv[]
-      NULL
-      envp[]
-      NULL
-
-  */
-
+  // Align stack pointer to 16 bytes for SysV ABI
   sp &= ~0xFULL;
 
-  // From here we push a fixed number of 8-byte slots: envp NULL, envc
-  // envp pointers, argv NULL, argc argv pointers, and finally argc itself
-  // -- that's 8 * (3 + envc + argc) bytes. For the final rsp (where argc
-  // lands) to satisfy the ABI's rsp % 16 == 8 at entry, that total must be
-  // == 8 (mod 16), i.e. (envc + argc) must be even. Pad here if it isn't --
-  // NOT next to argc itself, since crt0 expects argv at exactly [rsp+8]
-  // with no gap.
-  if ((envc + argc) % 2 != 0) {
+  // Ensure total number of qwords pushed below leaves rsp % 16 == 0 (rsp % 16 == 8 before call main)
+  // Total qwords = 1 (argc) + argc (argv) + 1 (NULL) + envc (envp) + 1 (NULL) = argc + envc + 3
+  if ((argc + envc + 3) % 2 != 0) {
     sp -= sizeof(uint64_t);
+    *(uint64_t *)sp = 0;
   }
 
   // envp NULL
@@ -250,13 +229,9 @@ static uint64_t setup_user_stack(uint64_t stack_top, char **argv, char **envp) {
 
   // envp[]
   for (int i = envc - 1; i >= 0; i--) {
-
     sp -= sizeof(uint64_t);
-
     *(uint64_t *)sp = (uint64_t)env_ptrs[i];
   }
-
-  uint64_t envp_addr = sp;
 
   // argv NULL
   sp -= sizeof(uint64_t);
@@ -264,18 +239,12 @@ static uint64_t setup_user_stack(uint64_t stack_top, char **argv, char **envp) {
 
   // argv[]
   for (int i = argc - 1; i >= 0; i--) {
-
     sp -= sizeof(uint64_t);
-
     *(uint64_t *)sp = (uint64_t)argv_ptrs[i];
   }
 
-  uint64_t argv_addr = sp;
-
-  // argc -- lands at exactly the rsp we return, immediately below argv[0],
-  // and (per the padding above) satisfies the ABI's rsp % 16 == 8 at entry.
+  // argc
   sp -= sizeof(uint64_t);
-
   *(uint64_t *)sp = argc;
 
   return sp;
@@ -341,6 +310,7 @@ bool exec_current(const char *path, char **argv, char **envp) {
   mm::AddressSpace *old_space = proc->space;
 
   proc->space = new_space;
+  proc->mmap_next = 0;
 
   new_space->activate();
 
@@ -351,6 +321,12 @@ bool exec_current(const char *path, char **argv, char **envp) {
   stack_top &= ~0xFULL;
 
   uint64_t user_stack = setup_user_stack(stack_top, argv_copy, envp_copy);
+
+  for (int i = 0; argv_copy[i]; i++)
+    heap::kfree(argv_copy[i]);
+
+  for (int i = 0; envp_copy[i]; i++)
+    heap::kfree(envp_copy[i]);
 
   Registers *r = (Registers *)(task->stack + 8192 - sizeof(Registers));
 
@@ -369,15 +345,22 @@ bool exec_current(const char *path, char **argv, char **envp) {
 
   task->regs = r;
 
+  if (task->stack) {
+    gdt::set_kernel_stack((uint64_t)task->stack + 8192);
+  }
+
   exec_enter(r);
 
   __builtin_unreachable();
 }
 
 Registers *schedule(Registers *old) {
-
-  if (current_task)
+  if (current_task) {
     current_task->regs = old;
+    if (current_task->state == State::RUNNING) {
+      current_task->state = State::READY;
+    }
+  }
 
   if (!head)
     return old;
@@ -386,11 +369,8 @@ Registers *schedule(Registers *old) {
 
   if (!current_task)
     next = head;
-
   else {
-
     next = current_task->next;
-
     if (!next)
       next = head;
   }
@@ -398,22 +378,32 @@ Registers *schedule(Registers *old) {
   Task *start = next;
 
   do {
-
-    if (next->state != State::DEAD)
+    if (next->state == State::READY)
       break;
 
     next = next->next;
-
     if (!next)
       next = head;
 
   } while (next != start);
 
+  if (next->state != State::READY) {
+    if (current_task && current_task->state != State::DEAD) {
+      current_task->state = State::RUNNING;
+      return current_task->regs;
+    }
+    return old;
+  }
+
   current_task = next;
 
   current_task->state = State::RUNNING;
 
-  if (current_task->process) {
+  if (current_task->stack) {
+    gdt::set_kernel_stack((uint64_t)current_task->stack + 8192);
+  }
+
+  if (current_task->process && current_task->process->space) {
     current_task->process->space->activate();
   }
 
@@ -422,6 +412,11 @@ Registers *schedule(Registers *old) {
 
 Task *get_current() {
   return current_task;
+}
+
+extern "C" void set_current_regs(Registers *r) {
+  if (current_task)
+    current_task->regs = r;
 }
 
 Task *find(uint64_t pid) {
@@ -478,10 +473,11 @@ void exit(int code) {
     current_task->parent->state = State::READY;
   }
 
-  schedule(current_task->regs);
+  Registers *next_regs = schedule(current_task->regs);
 
-  while (1)
-    asm volatile("hlt");
+  exec_enter(next_regs);
+
+  __builtin_unreachable();
 }
 
 Process *clone(Process *parent) {
@@ -489,19 +485,11 @@ Process *clone(Process *parent) {
     return nullptr;
 
   Process *child = (Process *)heap::kmalloc(sizeof(Process));
-
   if (!child)
     return nullptr;
 
-  memcpy(child, parent, sizeof(Process));
+  memset(child, 0, sizeof(Process));
 
-  // memcpy above copies the parent's pid and space pointer verbatim.
-  // Every process here calls exec() right after fork() (see bin/hello.c),
-  // and exec() maps the new program straight into proc->space -- if that's
-  // still literally the parent's AddressSpace, exec() ends up overwriting
-  // the parent's own memory while the parent is still running. Give the
-  // child its own address space (and its own pid, so it isn't mistaken
-  // for the parent) instead of aliasing the parent's.
   child->pid = pid_counter++;
   child->space = mm::AddressSpace::create();
 
@@ -510,46 +498,42 @@ Process *clone(Process *parent) {
     return nullptr;
   }
 
+  memcpy(child->fds, parent->fds, sizeof(child->fds));
+
   paging::clone_user_pages(child->space->table->pml4, parent->space->table->pml4);
 
-  Task *task = create_task(child, (uint64_t)task_wrapper);
-
-  if (!task)
+  Task *task = (Task *)heap::kmalloc(sizeof(Task));
+  if (!task) {
+    child->space->destroy();
+    heap::kfree(child);
     return nullptr;
+  }
 
-  memcpy(task->regs, parent->main_thread->regs, sizeof(Registers));
+  memset(task, 0, sizeof(Task));
 
-  // The Registers we just copied still hold the PARENT's rsp/rbp, i.e.
-  // addresses inside the parent's own 8KB stack -- not the fresh one
-  // create_task() just gave this child. Copy the live portion of the
-  // parent's stack (from its current rsp up to the top) into the same
-  // relative position in the child's own stack, and shift rsp/rbp by
-  // the offset between the two stacks' top addresses, so the child's
-  // saved registers point into its own copy instead of aliasing the
-  // parent's live stack.
-  uint64_t parent_top = ((uint64_t)parent->main_thread->stack + 8192) & ~0xFULL;
-  uint64_t child_top = ((uint64_t)task->stack + 8192) & ~0xFULL;
+  task->stack = (uint8_t *)heap::kmalloc(8192);
+  if (!task->stack) {
+    child->space->destroy();
+    heap::kfree(task);
+    heap::kfree(child);
+    return nullptr;
+  }
 
-  uint64_t parent_rsp = task->regs->rsp; // just copied from the parent
+  task->pid = child->pid;
+  task->process = child;
+  task->parent = parent->main_thread;
+  task->state = State::READY;
 
-  uint64_t used = parent_top - parent_rsp;
+  Registers *r = (Registers *)(task->stack + 8192 - sizeof(Registers));
+  memcpy(r, parent->main_thread->regs, sizeof(Registers));
 
-  if (used > 8192)
-    used = 8192; // defensive clamp -- shouldn't happen
+  // fork() returns 0 in child
+  r->rax = 0;
 
-  int64_t delta = (int64_t)child_top - (int64_t)parent_top;
-
-  uint64_t child_rsp = (uint64_t)((int64_t)parent_rsp + delta);
-
-  memcpy((void *)child_rsp, (void *)parent_rsp, used);
-
-  task->regs->rsp = child_rsp;
-  task->regs->rbp = (uint64_t)((int64_t)task->regs->rbp + delta);
-
-  // fork() == 0 in child
-  task->regs->rax = 0;
-
+  task->regs = r;
   child->main_thread = task;
+
+  add(task);
 
   return child;
 }
@@ -582,6 +566,30 @@ void destroy_task(Task *task) {
     heap::kfree(task->stack);
 
   heap::kfree(task);
+}
+
+void remove_and_destroy(Task *task) {
+  if (!task || task == current_task)
+    return;
+
+  if (head == task) {
+    head = task->next;
+  } else {
+    Task *t = head;
+    while (t && t->next != task)
+      t = t->next;
+    if (t)
+      t->next = task->next;
+  }
+
+  if (task->process) {
+    if (task->process->space) {
+      task->process->space->destroy();
+    }
+    heap::kfree(task->process);
+  }
+
+  destroy_task(task);
 }
 
 } // namespace sched

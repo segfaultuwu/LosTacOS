@@ -9,9 +9,16 @@
 
 namespace multiboot2 {
 
+char boot_cmdline[256] = "BOOT_IMAGE=/boot/kernel.elf quiet";
+
 void parse_info(uint64_t mbi_phys_addr) {
   for_each_tag(mbi_phys_addr, [](struct multiboot_tag *tag) {
     switch (tag->type) {
+    case 1: {
+      struct multiboot_tag_string *cmd = (struct multiboot_tag_string *)tag;
+      strncpy(boot_cmdline, cmd->string, sizeof(boot_cmdline) - 1);
+      break;
+    }
     case 3: {
       struct multiboot_tag_module *mod = (struct multiboot_tag_module *)tag;
 

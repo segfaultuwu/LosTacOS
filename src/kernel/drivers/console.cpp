@@ -172,7 +172,7 @@ void put(char c) {
     if (ansi_pos < sizeof(ansi) - 1)
       ansi[ansi_pos++] = c;
 
-    if (c == 'm' || c == 'J' || c == 'H') {
+    if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || ansi_pos >= sizeof(ansi) - 1) {
 
       ansi[ansi_pos] = 0;
 

@@ -23,6 +23,8 @@ uintptr_t alloc_page();
 void free_page(uintptr_t addr);
 
 uint64_t free_memory();
+uint64_t total_memory();
+uint64_t used_memory();
 
 void print_memory_map();
 

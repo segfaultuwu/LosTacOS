@@ -259,48 +259,48 @@ uint64_t *create_address_space() {
 }
 
 void clone_user_pages(uint64_t *dst_pml4, uint64_t *src_pml4) {
-  uint64_t *src_pdpt = (uint64_t *)(src_pml4[0] & ~0xFFFULL);
+  if (!(src_pml4[0] & PAGE_PRESENT))
+    return;
 
+  uint64_t *src_pdpt = (uint64_t *)(src_pml4[0] & ~0xFFFULL);
   if (!src_pdpt)
     return;
 
-  // Only the one PDPT slot dedicated to the per-process ELF/user region
-  // (see create_address_space()) is actually private -- everything else
-  // is shared with the kernel already, so only that slot needs copying.
-  constexpr int USER_PDPT_SLOT = 0x40000000 >> 30;
-
-  int pi = USER_PDPT_SLOT;
-
-  if (!(src_pdpt[pi] & PAGE_PRESENT))
-    return;
-
-  uint64_t *src_pd = (uint64_t *)(src_pdpt[pi] & ~0xFFFULL);
-
-  for (int di = 0; di < 512; di++) {
-    if (!(src_pd[di] & PAGE_PRESENT))
+  for (int pi = 0; pi < 512; pi++) {
+    if (!(src_pdpt[pi] & PAGE_PRESENT))
       continue;
 
-    uint64_t *src_pt = (uint64_t *)(src_pd[di] & ~0xFFFULL);
+    uint64_t *src_pd = (uint64_t *)(src_pdpt[pi] & ~0xFFFULL);
 
-    for (int ti = 0; ti < 512; ti++) {
-      if (!(src_pt[ti] & PAGE_PRESENT))
+    for (int di = 0; di < 512; di++) {
+      if (!(src_pd[di] & PAGE_PRESENT))
         continue;
 
-      uint64_t va = ((uint64_t)pi << 30) | ((uint64_t)di << 21) | ((uint64_t)ti << 12);
+      uint64_t *src_pt = (uint64_t *)(src_pd[di] & ~0xFFFULL);
 
-      uint64_t src_phys = src_pt[ti] & ~0xFFFULL;
-      uint64_t flags = src_pt[ti] & 0xFFF;
+      for (int ti = 0; ti < 512; ti++) {
+        if (!(src_pt[ti] & PAGE_PRESENT))
+          continue;
 
-      void *dst_page = alloc_page();
+        uint64_t flags = src_pt[ti] & 0xFFF;
+        if (!(flags & PAGE_USER))
+          continue;
 
-      uint64_t *src = (uint64_t *)(src_phys);
+        uint64_t va = ((uint64_t)pi << 30) | ((uint64_t)di << 21) | ((uint64_t)ti << 12);
+        uint64_t src_phys = src_pt[ti] & ~0xFFFULL;
 
-      uint64_t *dst = (uint64_t *)dst_page;
+        void *dst_page = alloc_page();
+        if (!dst_page)
+          continue;
 
-      for (int w = 0; w < 512; w++)
-        dst[w] = src[w];
+        uint64_t *src = (uint64_t *)(src_phys);
+        uint64_t *dst = (uint64_t *)dst_page;
 
-      map_page(dst_pml4, va, (uint64_t)dst_page, flags);
+        for (int w = 0; w < 512; w++)
+          dst[w] = src[w];
+
+        map_page(dst_pml4, va, (uint64_t)dst_page, flags);
+      }
     }
   }
 }

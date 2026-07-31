@@ -21,50 +21,44 @@ namespace {
 
 constexpr int MAX_FDS = 32;
 
-enum FDType { FD_NONE, FD_FILE, FD_PIPE };
-
-struct Pipe {
-  char buffer[4096];
-
-  size_t read_pos;
-  size_t write_pos;
-
-  int readers;
-  int writers;
-};
-
-struct FdEntry {
-  FDType type = FD_NONE;
-
-  fs::vfs::Node *node = nullptr;
-
-  Pipe *pipe = nullptr;
-
-  fs::Mount *mount = nullptr;
-  void *fs_handle = nullptr;
-
-  size_t offset = 0;
-
-  bool readable = false;
-  bool writable = false;
-};
+using sched::FDType;
+using sched::Pipe;
+using sched::FdEntry;
+using sched::FD_NONE;
+using sched::FD_FILE;
+using sched::FD_PIPE;
 
 static Pipe pipes[32];
 static bool pipe_used[32];
 
-FdEntry fd_table[MAX_FDS];
+static FdEntry *get_fd_entry(int fd) {
+  if (fd < 0 || fd >= MAX_FDS)
+    return nullptr;
+
+  sched::Task *task = sched::get_current();
+  if (!task || !task->process)
+    return nullptr;
+
+  return &task->process->fds[fd];
+}
 
 int alloc_fd(fs::vfs::Node *node) {
+  sched::Task *task = sched::get_current();
+  if (!task || !task->process)
+    return -1;
+
+  sched::Process *proc = task->process;
+
   for (int fd = 3; fd < MAX_FDS; fd++) {
 
-    if (fd_table[fd].type == FD_NONE) {
+    if (proc->fds[fd].type == FD_NONE) {
 
-      memset(&fd_table[fd], 0, sizeof(FdEntry));
+      memset(&proc->fds[fd], 0, sizeof(FdEntry));
 
-      fd_table[fd].node = node;
+      proc->fds[fd].node = node;
 
       if (node)
-        fd_table[fd].type = FD_FILE;
+        proc->fds[fd].type = FD_FILE;
 
       return fd;
     }
@@ -74,7 +68,8 @@ int alloc_fd(fs::vfs::Node *node) {
 }
 
 bool valid_fd(int fd) {
-  return fd >= 0 && fd < MAX_FDS && fd_table[fd].type != FD_NONE;
+  FdEntry *entry = get_fd_entry(fd);
+  return entry != nullptr && entry->type != FD_NONE;
 }
 
 } // namespace
@@ -84,6 +79,12 @@ static uint64_t sys_pipe(uint64_t arg) {
 
   if (!fds)
     return -1;
+
+  sched::Task *task = sched::get_current();
+  if (!task || !task->process)
+    return -1;
+
+  sched::Process *proc = task->process;
 
   for (int i = 0; i < 32; i++) {
     if (!pipe_used[i]) {
@@ -100,14 +101,14 @@ static uint64_t sys_pipe(uint64_t arg) {
       int wfd = -1;
 
       for (int j = 3; j < MAX_FDS; j++) {
-        if (fd_table[j].type == FD_NONE) {
+        if (proc->fds[j].type == FD_NONE) {
           rfd = j;
           break;
         }
       }
 
       for (int j = 3; j < MAX_FDS; j++) {
-        if (fd_table[j].type == FD_NONE && j != rfd) {
+        if (proc->fds[j].type == FD_NONE && j != rfd) {
           wfd = j;
           break;
         }
@@ -116,15 +117,15 @@ static uint64_t sys_pipe(uint64_t arg) {
       if (rfd < 0 || wfd < 0)
         return -1;
 
-      fd_table[rfd].type = FD_PIPE;
-      fd_table[rfd].pipe = p;
-      fd_table[rfd].readable = true;
-      fd_table[rfd].writable = false;
+      proc->fds[rfd].type = FD_PIPE;
+      proc->fds[rfd].pipe = p;
+      proc->fds[rfd].readable = true;
+      proc->fds[rfd].writable = false;
 
-      fd_table[wfd].type = FD_PIPE;
-      fd_table[wfd].pipe = p;
-      fd_table[wfd].readable = false;
-      fd_table[wfd].writable = true;
+      proc->fds[wfd].type = FD_PIPE;
+      proc->fds[wfd].pipe = p;
+      proc->fds[wfd].readable = false;
+      proc->fds[wfd].writable = true;
 
       fds[0] = rfd;
       fds[1] = wfd;
@@ -147,16 +148,15 @@ static uint64_t sys_write(uint64_t a, uint64_t b, uint64_t c) {
   if (fd == 1 || fd == 2)
     return tty::write(buf, len);
 
-  if (!valid_fd(fd))
+  FdEntry *entry = get_fd_entry(fd);
+  if (!entry || entry->type == FD_NONE)
     return (uint64_t)-1;
 
-  FdEntry &entry = fd_table[fd];
-
-  if (entry.type == FD_PIPE) {
-    if (!entry.writable)
+  if (entry->type == FD_PIPE) {
+    if (!entry->writable)
       return -1;
 
-    Pipe *p = entry.pipe;
+    Pipe *p = entry->pipe;
 
     size_t written = 0;
 
@@ -170,12 +170,11 @@ static uint64_t sys_write(uint64_t a, uint64_t b, uint64_t c) {
     return written;
   }
 
-  fs::vfs::Node *node = fd_table[fd].node;
+  fs::vfs::Node *node = entry->node;
 
-  if (node->dev && node->dev->write)
-    return node->dev->write(buf, len, fd_table[fd].offset);
+  if (node && node->dev && node->dev->write)
+    return node->dev->write(buf, len, entry->offset);
 
-  // idk why it does not render without it, it's already in console::write lol
   framebuffer::swap();
 
   return (uint64_t)-1;
@@ -189,24 +188,22 @@ static uint64_t sys_read(uint64_t a, uint64_t b, uint64_t c) {
   if (fd == 0)
     return tty::read(buf, len);
 
-  if (!valid_fd(fd))
+  FdEntry *entry = get_fd_entry(fd);
+  if (!entry || entry->type == FD_NONE)
     return (uint64_t)-1;
 
-  FdEntry &entry = fd_table[fd];
-
-  if (!entry.node && entry.mount && entry.fs_handle) {
-
-    return entry.mount->fs->read(entry.fs_handle, buf, len);
+  if (!entry->node && entry->mount && entry->fs_handle && entry->mount->fs && entry->mount->fs->read) {
+    return entry->mount->fs->read(entry->fs_handle, buf, len);
   }
 
-  if (entry.type == FD_PIPE) {
-    if (!entry.readable)
+  if (entry->type == FD_PIPE) {
+    if (!entry->readable)
       return -1;
 
-    Pipe *p = entry.pipe;
+    Pipe *p = entry->pipe;
 
     while (p->read_pos >= p->write_pos) {
-      asm volatile("sti; hlt; cli");
+      asm volatile("sti; hlt");
     }
 
     size_t n = 0;
@@ -218,33 +215,33 @@ static uint64_t sys_read(uint64_t a, uint64_t b, uint64_t c) {
     return n;
   }
 
-  fs::vfs::Node *node = entry.node;
+  fs::vfs::Node *node = entry->node;
 
-  if (node->dev && node->dev->read)
-    return node->dev->read(buf, len, fd_table[fd].offset);
+  if (node && node->dev && node->dev->read)
+    return node->dev->read(buf, len, entry->offset);
 
-  if (!node->directory && node->file && node->file->read) {
-    node->file->offset = entry.offset;
+  if (node && !node->directory && node->file && node->file->read) {
+    node->file->offset = entry->offset;
 
     int n = node->file->read(node->file, (uint8_t *)buf, len);
 
-    entry.offset = node->file->offset;
+    entry->offset = node->file->offset;
 
     return n;
   }
 
-  if (!node->directory && node->file && node->file->private_data) {
+  if (node && !node->directory && node->file && node->file->private_data) {
     size_t size = node->file->size;
 
-    if (entry.offset >= size)
+    if (entry->offset >= size)
       return 0;
 
-    size_t remaining = size - entry.offset;
+    size_t remaining = size - entry->offset;
     size_t n = len < remaining ? len : remaining;
 
-    memcpy(buf, (const char *)node->file->private_data + entry.offset, n);
+    memcpy(buf, (const char *)node->file->private_data + entry->offset, n);
 
-    entry.offset += n;
+    entry->offset += n;
 
     return n;
   }
@@ -257,7 +254,7 @@ static uint64_t sys_open(uint64_t a) {
 
   fs::Mount *mnt = fs::find_mount(path);
 
-  if (mnt) {
+  if (mnt && mnt->fs && mnt->fs->open) {
     const char *sub = path + strlen(mnt->path);
 
     while (*sub == '/')
@@ -270,18 +267,18 @@ static uint64_t sys_open(uint64_t a) {
         int fd = alloc_fd(nullptr);
 
         if (fd >= 0) {
-          fd_table[fd].type = FD_FILE;
-          fd_table[fd].fs_handle = handle;
-          fd_table[fd].mount = mnt;
-          return fd;
+          FdEntry *entry = get_fd_entry(fd);
+          if (entry) {
+            entry->type = FD_FILE;
+            entry->fs_handle = handle;
+            entry->mount = mnt;
+            return fd;
+          }
         }
       }
 
       return -1;
     }
-
-    // opening the mount point itself (e.g. "/dev", "/proc") -- fall
-    // through to the plain vfs node below so directory listing works.
   }
 
   fs::vfs::Node *node = fs::vfs::find(path);
@@ -295,27 +292,30 @@ static uint64_t sys_open(uint64_t a) {
 static uint64_t sys_close(uint64_t a) {
   int fd = a;
 
-  if (!valid_fd(fd))
+  FdEntry *entry = get_fd_entry(fd);
+  if (!entry || entry->type == FD_NONE)
     return -1;
 
-  FdEntry &entry = fd_table[fd];
+  if (entry->mount && entry->fs_handle && entry->mount->fs && entry->mount->fs->close) {
+    entry->mount->fs->close(entry->fs_handle);
+  }
 
-  if (entry.type == FD_PIPE) {
-    if (entry.readable)
-      entry.pipe->readers--;
+  if (entry->type == FD_PIPE) {
+    if (entry->readable)
+      entry->pipe->readers--;
 
-    if (entry.writable)
-      entry.pipe->writers--;
+    if (entry->writable)
+      entry->pipe->writers--;
 
-    if (entry.pipe->readers == 0 && entry.pipe->writers == 0) {
+    if (entry->pipe->readers == 0 && entry->pipe->writers == 0) {
       for (int i = 0; i < 32; i++) {
-        if (&pipes[i] == entry.pipe)
+        if (&pipes[i] == entry->pipe)
           pipe_used[i] = false;
       }
     }
   }
 
-  memset(&entry, 0, sizeof(FdEntry));
+  memset(entry, 0, sizeof(FdEntry));
 
   return 0;
 }
@@ -325,10 +325,6 @@ static uint64_t sys_execve(uint64_t a, uint64_t b, uint64_t c) {
   char **argv = (char **)b;
   char **envp = (char **)c;
 
-  // On success exec_current() never returns (it jumps straight into the new
-  // program via exec_enter()). It only returns here on failure, so that's
-  // the only case we need to convert -- and it must come back as -1, not 0,
-  // or callers checking `execve(...) < 0` will think it succeeded.
   if (!sched::exec_current(path, argv, envp))
     return (uint64_t)-1;
 
@@ -359,17 +355,16 @@ static uint64_t sys_lseek(uint64_t a, uint64_t b, uint64_t c) {
   int64_t offset = (int64_t)b;
   int whence = (int)c;
 
-  if (!valid_fd(fd))
+  FdEntry *entry = get_fd_entry(fd);
+  if (!entry || entry->type == FD_NONE)
     return (uint64_t)-1;
 
-  FdEntry &entry = fd_table[fd];
-
-  if (entry.type == FD_PIPE)
+  if (entry->type == FD_PIPE)
     return -1;
 
-  fs::vfs::Node *node = entry.node;
+  fs::vfs::Node *node = entry->node;
 
-  size_t size = node->file ? node->file->size : 0;
+  size_t size = (node && node->file) ? node->file->size : 0;
 
   int64_t base;
 
@@ -378,7 +373,7 @@ static uint64_t sys_lseek(uint64_t a, uint64_t b, uint64_t c) {
     base = 0;
     break;
   case 1:
-    base = (int64_t)entry.offset;
+    base = (int64_t)entry->offset;
     break;
   case 2:
     base = (int64_t)size;
@@ -392,23 +387,24 @@ static uint64_t sys_lseek(uint64_t a, uint64_t b, uint64_t c) {
   if (new_offset < 0)
     return (uint64_t)-1;
 
-  entry.offset = (size_t)new_offset;
+  entry->offset = (size_t)new_offset;
 
-  return entry.offset;
+  return entry->offset;
 }
 
 static uint64_t sys_fsize(uint64_t a) {
   int fd = (int)a;
 
-  if (!valid_fd(fd))
+  FdEntry *entry = get_fd_entry(fd);
+  if (!entry || entry->type == FD_NONE)
     return (uint64_t)-1;
 
-  if (fd_table[fd].type == FD_PIPE)
+  if (entry->type == FD_PIPE)
     return 0;
 
-  fs::vfs::Node *node = fd_table[fd].node;
+  fs::vfs::Node *node = entry->node;
 
-  return node->file ? node->file->size : 0;
+  return (node && node->file) ? node->file->size : 0;
 }
 
 static uint64_t sys_wait(uint64_t a) {
@@ -417,10 +413,18 @@ static uint64_t sys_wait(uint64_t a) {
   while (true) {
     sched::Task *task = sched::find(pid);
 
-    if (!task || task->state == sched::State::DEAD)
+    if (!task || task->state == sched::State::DEAD) {
+      if (task) {
+        sched::remove_and_destroy(task);
+      }
       return 0;
+    }
 
-    asm volatile("sti; hlt; cli");
+    sched::Task *curr = sched::get_current();
+    if (curr)
+      curr->state = sched::State::BLOCKED;
+
+    sched::yield();
   }
 }
 
@@ -428,15 +432,20 @@ static uint64_t sys_dup2(uint64_t a, uint64_t b) {
   int oldfd = a;
   int newfd = b;
 
-  if (!valid_fd(oldfd))
+  FdEntry *old_entry = get_fd_entry(oldfd);
+  if (!old_entry || old_entry->type == FD_NONE)
     return -1;
 
   if (newfd < 0 || newfd >= MAX_FDS)
     return -1;
 
-  fd_table[newfd] = fd_table[oldfd];
+  sched::Task *task = sched::get_current();
+  if (task && task->process) {
+    task->process->fds[newfd] = *old_entry;
+    return newfd;
+  }
 
-  return newfd;
+  return -1;
 }
 
 static uint64_t sys_fork() {
@@ -477,11 +486,6 @@ static uint64_t sys_mmap(uint64_t a, uint64_t b) {
 
   sched::Process *proc = task->process;
 
-  // Bump-allocate out of the private per-process region (PDPT slot 1,
-  // 0x40000000-0x80000000 -- see paging.cpp) that elf::load() places the
-  // program's own image in. MMAP_BASE sits well above where any binary
-  // built with cfg/user.ld is going to reach, so it won't collide with
-  // the program image or its BSS.
   constexpr uint64_t MMAP_BASE = 0x50000000;
 
   if (!proc->mmap_next)
@@ -509,14 +513,6 @@ static uint64_t sys_munmap(uint64_t ptr) {
   if (!ptr)
     return -1;
 
-  // sys_mmap() now hands out pages mapped straight into the caller's own
-  // address space rather than a kernel-heap pointer, and nothing in this
-  // kernel reclaims individual physical pages once handed out (alloc_page()
-  // itself is a bump allocator with no free path either). So there is
-  // nothing safe to do here yet beyond accepting the call -- freeing the
-  // mapping would need a per-process allocator that can hand pages back,
-  // which doesn't exist. Leaving this a no-op avoids treating a user VA as
-  // a kernel heap pointer, which is what caused the previous crash.
   return 0;
 }
 
@@ -524,12 +520,11 @@ static uint64_t sys_readdir(uint64_t a, uint64_t b) {
   int fd = (int)a;
   auto *out = (fs::vfs::Dirent *)b;
 
-  if (!valid_fd(fd) || !out)
+  FdEntry *entry = get_fd_entry(fd);
+  if (!entry || entry->type == FD_NONE || !out)
     return (uint64_t)-1;
 
-  auto &entry = fd_table[fd];
-
-  auto *dir = entry.node;
+  auto *dir = entry->node;
 
   if (!dir || !dir->directory)
     return (uint64_t)-1;
@@ -539,11 +534,11 @@ static uint64_t sys_readdir(uint64_t a, uint64_t b) {
   size_t index = 0;
 
   while (child) {
-    if (index == entry.offset) {
+    if (index == entry->offset) {
       memset(out, 0, sizeof(*out));
 
       out->d_ino = 0;
-      out->d_off = entry.offset + 1;
+      out->d_off = entry->offset + 1;
 
       out->d_reclen = sizeof(*out);
 
@@ -551,7 +546,7 @@ static uint64_t sys_readdir(uint64_t a, uint64_t b) {
 
       strncpy(out->d_name, child->name, sizeof(out->d_name) - 1);
 
-      entry.offset++;
+      entry->offset++;
 
       return 1;
     }

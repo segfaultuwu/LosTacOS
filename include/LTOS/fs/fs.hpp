@@ -36,5 +36,6 @@ struct FileSystem {
 bool mount(const char *path, FileSystem *fs, void *data);
 
 Mount *find_mount(const char *path);
+Mount *get_mounts();
 
 } // namespace fs

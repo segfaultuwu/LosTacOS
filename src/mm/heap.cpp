@@ -79,17 +79,20 @@ void kfree(void *ptr) {
   if (!ptr)
     return;
 
+  uintptr_t p = (uintptr_t)ptr;
+  if (p < HEAP_START + sizeof(Block) || p >= HEAP_START + HEAP_SIZE)
+    return;
+
   Block *block = (Block *)((uint8_t *)ptr - sizeof(Block));
 
   block->free = true;
 
-  // merge
+  // merge adjacent free blocks safely
   Block *curr = heap_head;
 
   while (curr && curr->next) {
     if (curr->free && curr->next->free) {
       curr->size += sizeof(Block) + curr->next->size;
-
       curr->next = curr->next->next;
     } else {
       curr = curr->next;

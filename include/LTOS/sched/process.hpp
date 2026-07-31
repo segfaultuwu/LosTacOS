@@ -11,6 +11,27 @@ namespace sched {
 
 struct Task;
 
+enum FDType { FD_NONE, FD_FILE, FD_PIPE };
+
+struct Pipe {
+  char buffer[4096];
+  size_t read_pos;
+  size_t write_pos;
+  int readers;
+  int writers;
+};
+
+struct FdEntry {
+  FDType type = FD_NONE;
+  fs::vfs::Node *node = nullptr;
+  Pipe *pipe = nullptr;
+  fs::Mount *mount = nullptr;
+  void *fs_handle = nullptr;
+  size_t offset = 0;
+  bool readable = false;
+  bool writable = false;
+};
+
 struct Process {
 
   uint64_t pid;
@@ -32,6 +53,8 @@ struct Process {
   State state;
 
   Process *parent;
+
+  FdEntry fds[32];
 };
 
 } // namespace sched

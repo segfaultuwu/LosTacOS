@@ -1,33 +1,34 @@
 #include "LTOS/lib/kprintf.h"
 #include "LTOS/logger.hpp"
 #include "LTOS/panic.hpp"
+#include "LTOS/sched/process.hpp"
 #include "LTOS/sched/scheduler.hpp"
 
 #include <stdint.h>
 
 extern "C" void divide_error() {
+  sched::Task *curr = sched::get_current();
+  if (curr && curr->process && curr->process->pid > 0) {
+    sched::exit(136);
+  }
   panic::halt("Divide by zero");
 }
 
-void handle_user_page_fault(uint64_t addr, uint64_t rip, uint64_t err) {
-  logger::error("[TASK %d] SEGFAULT at %x (rip=%x)\n", sched::get_current()->pid, addr, rip);
-
-  sched::exit(139);
-}
-
 extern "C" void unhandled_interrupt(uint64_t vector, uint64_t err, uint64_t addr, uint64_t rip) {
-  bool present = err & 1;
-  bool write = err & 2;
-  bool user = err & 4;
+  bool user = (err & 4) != 0;
 
-  logger::error("vector=%d rip=%x err/addr=%x", vector, rip, addr);
+  sched::Task *curr = sched::get_current();
+  uint64_t pid = curr ? curr->pid : 0;
 
-  switch (vector) {
-  case 14: {
+  logger::error("[TASK %lu] Exception vector=%lu err=%lx addr=%lx rip=%lx\n", pid, vector, err,
+                addr, rip);
 
-    bool user = err & 4;
+  if (user || (curr && curr->process && curr->process->pid > 0 && rip < 0x8000000000)) {
+    logger::error("Terminating user process %lu due to exception %lu\n", pid, vector);
+    sched::exit(128 + (int)vector);
+  }
 
-    logger::error("vector=%lx err=%lx addr=%lx rip=%lx", vector, err, addr, rip);
+  if (vector == 14) {
     uint64_t cr3;
     asm volatile("mov %%cr3, %0" : "=r"(cr3));
 
@@ -42,25 +43,8 @@ extern "C" void unhandled_interrupt(uint64_t vector, uint64_t err, uint64_t addr
 
     logger::error("PML4=%lx PDPT=%lx PD=%lx PTE=%lx", pml4e, pdpte, pde, pte);
 
-    if (user)
-      handle_user_page_fault(addr, rip, err);
-
     panic::halt("Kernel page fault");
   }
-  case 6: {
-    logger::error("unhandled interrupt vector: 6 (#UD - invalid opcode)");
-    logger::error("rip=%x", rip);
 
-    uint8_t *code = (uint8_t *)rip;
-    logger::error("bytes: ");
-    for (int i = 0; i < 8; i++)
-      kprintf("%x ", code[i]);
-    kprintf("\n");
-
-    panic::halt("Invalid opcode");
-    break;
-  }
-  }
-
-  panic::halt("^ Unhandled interrupt vector");
+  panic::halt("^ Unhandled kernel exception");
 }

@@ -4,11 +4,15 @@ section .text
 
 global isr128
 extern syscall_handler
+extern set_current_regs
 
 
 isr128:
 
     cli
+
+    push 0
+    push 128
 
     push rax
     push rbx
@@ -30,6 +34,9 @@ isr128:
     push r14
     push r15
 
+
+    mov rdi, rsp
+    call set_current_regs
 
     ; userspace (libc/src/syscall.asm) hands us: rax=num rdi=a1 rsi=a2 rdx=a3
     ; r10=a4 r8=a5 r9=a6. After the pushes above, those live at:
@@ -73,5 +80,7 @@ isr128:
     pop rcx
     pop rbx
     pop rax
+
+    add rsp, 16       ; drop vector and error
 
     iretq

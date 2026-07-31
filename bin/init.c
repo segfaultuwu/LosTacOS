@@ -15,7 +15,7 @@ int main() {
       n = 0;
     buf[n] = '\0';
 
-    printf("Boot time: %sms\n", buf);
+    printf("Boot time: %s\n", buf);
     close(fd);
   }
 
