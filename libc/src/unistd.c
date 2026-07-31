@@ -1,8 +1,28 @@
+#include <fcntl.h>
+
 #include <sys/syscall.h>
 #include <unistd.h>
 
-int open(const char *path) {
-  return (int)syscall(SYS_OPEN, (long)path);
+int open(const char *path, int flags, ...) {
+  va_list args;
+
+  va_start(args, flags);
+
+  /*
+   * Linux:
+   * open(path, flags, mode)
+   *
+   * mode jest potrzebny tylko przy O_CREAT.
+   */
+
+  long mode = 0;
+
+  if (flags & O_CREAT)
+    mode = va_arg(args, int);
+
+  va_end(args);
+
+  return (int)syscall(SYS_OPEN, (long)path, flags, mode);
 }
 
 int close(int fd) {

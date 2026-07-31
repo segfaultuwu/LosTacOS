@@ -2,10 +2,10 @@
 #include "LTOS/kernel.hpp"
 #include "LTOS/lib/kprintf.h"
 
-#include <stdint.h>
 #include <multiboot.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 namespace pmm {
 
@@ -71,11 +71,11 @@ constexpr uint32_t TAG_MMAP = 6;
 constexpr uint32_t MEMORY_AVAILABLE = 1;
 
 void init(uint64_t multiboot_addr) {
-  for (size_t i = 0; i < sizeof(bitmap); i++)
-    bitmap[i] = 0xff;
+  memset(bitmap, 0xff, sizeof(bitmap));
 
   free_pages_count = 0;
   total_pages = 0;
+  last_page = 0;
 
   auto tag = (multiboot_tag *)(uintptr_t)(multiboot_addr + 8);
 
@@ -88,19 +88,15 @@ void init(uint64_t multiboot_addr) {
       uint32_t count = (mmap->size - 16) / mmap->entry_size;
 
       for (uint32_t i = 0; i < count; i++) {
-
-        if (region_count < MAX_REGIONS) {
-          regions[region_count].base = entry->addr;
-          regions[region_count].length = entry->len;
-          regions[region_count].type = entry->type;
-          region_count++;
-        }
-
         if (entry->type == MEMORY_AVAILABLE) {
+          uint64_t pages = entry->len / PAGE_SIZE;
 
-          total_pages += entry->len / PAGE_SIZE;
+          if (pages > TOTAL_PAGES)
+            pages = TOTAL_PAGES;
 
-          free_region(entry->addr, entry->len);
+          total_pages += pages;
+
+          free_region(entry->addr, pages * PAGE_SIZE);
         }
 
         entry = (multiboot_mmap_entry *)((uint8_t *)entry + mmap->entry_size);
@@ -111,6 +107,7 @@ void init(uint64_t multiboot_addr) {
   }
 
   reserve_region(0, 0x100000);
+
   reserve_region((uint64_t)&_kernel_start, (uint64_t)&_kernel_end - (uint64_t)&_kernel_start);
 }
 

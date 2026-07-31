@@ -44,7 +44,7 @@ int atexit(void (*func)(void));
 
 /* basic io */
 
-int open(const char *path);
+int open(const char *path, int flags, ...);
 
 int close(int fd);
 

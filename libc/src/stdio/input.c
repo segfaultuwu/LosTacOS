@@ -1,5 +1,8 @@
 #include <stdarg.h>
+#include <stddef.h>
+#include <stdio.h>
 #include <sys/syscall.h>
+#include <unistd.h>
 
 static char input_buf[128];
 static int input_pos = 0;
@@ -17,6 +20,41 @@ static int getchar_internal() {
   }
 
   return (unsigned char)input_buf[input_pos++];
+}
+
+char *fgets(char *str, int size, FILE *stream) {
+  if (!str || !stream || size <= 0)
+    return NULL;
+
+  int i = 0;
+
+  while (i < size - 1) {
+
+    char c;
+
+    long ret = read(stream->fd, &c, 1);
+
+    if (ret <= 0) {
+      if (ret == 0)
+        stream->eof = 1;
+      else
+        stream->error = 1;
+
+      break;
+    }
+
+    str[i++] = c;
+
+    if (c == '\n')
+      break;
+  }
+
+  if (i == 0)
+    return NULL;
+
+  str[i] = '\0';
+
+  return str;
 }
 
 int getchar(void) {

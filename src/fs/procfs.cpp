@@ -80,13 +80,11 @@ static const char *get_meminfo() {
   uint64_t used_kb = pmm::used_memory() / 1024;
 
   ksnprintf(buffer, sizeof(buffer),
-            "MemTotal:       %lu kB\n"
-            "MemFree:        %lu kB\n"
-            "MemAvailable:   %lu kB\n"
-            "MemUsed:        %lu kB\n"
-            "Buffers:             0 kB\n"
-            "Cached:              0 kB\n",
-            total_kb, free_kb, free_kb, used_kb);
+            "MemTotal: %lu kB\n"
+            "MemFree: %lu kB\n"
+            "MemUsed: %lu kB\n",
+            total_kb, free_kb, used_kb);
+
   return buffer;
 }
 
