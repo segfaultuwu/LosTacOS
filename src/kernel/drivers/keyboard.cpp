@@ -518,7 +518,7 @@ void irq_handler() {
 
   char keychar = key_to_ascii(key);
 
-  if (stdin_len < sizeof(stdin_buffer)) {
+  if (keychar != 0 && stdin_len < sizeof(stdin_buffer)) {
     stdin_buffer[stdin_len] = keychar;
     stdin_len = stdin_len + 1;
   }

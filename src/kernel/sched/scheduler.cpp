@@ -2,6 +2,7 @@
 #include "LTOS/arch/x86_64/gdt.hpp"
 #include "LTOS/arch/x86_64/paging.hpp"
 #include "LTOS/exec/elf.hpp"
+#include "LTOS/lib/kprintf.h"
 #include "LTOS/logger.hpp"
 #include "LTOS/mm/address_space.hpp"
 #include "LTOS/mm/heap.hpp"
@@ -216,8 +217,9 @@ static uint64_t setup_user_stack(uint64_t stack_top, char **argv, char **envp) {
   // Align stack pointer to 16 bytes for SysV ABI
   sp &= ~0xFULL;
 
-  // Ensure total number of qwords pushed below leaves rsp % 16 == 0 (rsp % 16 == 8 before call main)
-  // Total qwords = 1 (argc) + argc (argv) + 1 (NULL) + envc (envp) + 1 (NULL) = argc + envc + 3
+  // Ensure total number of qwords pushed below leaves rsp % 16 == 0 (rsp % 16 == 8 before call
+  // main) Total qwords = 1 (argc) + argc (argv) + 1 (NULL) + envc (envp) + 1 (NULL) = argc + envc +
+  // 3
   if ((argc + envc + 3) % 2 != 0) {
     sp -= sizeof(uint64_t);
     *(uint64_t *)sp = 0;
@@ -388,10 +390,19 @@ Registers *schedule(Registers *old) {
   } while (next != start);
 
   if (next->state != State::READY) {
-    if (current_task && current_task->state != State::DEAD) {
-      current_task->state = State::RUNNING;
-      return current_task->regs;
-    }
+    Task *t = head;
+
+    do {
+      if (t->state != State::DEAD) {
+        current_task = t;
+        t->state = State::RUNNING;
+        return t->regs;
+      }
+
+      t = t->next ? t->next : head;
+
+    } while (t != head);
+
     return old;
   }
 
@@ -461,12 +472,13 @@ void yield() {
 }
 
 void exit(int code) {
+  if (!current_task)
+    return;
 
   current_task->exit_code = code;
   current_task->state = State::DEAD;
 
   if (current_task->parent && current_task->parent->state == State::BLOCKED) {
-
     current_task->parent->state = State::READY;
   }
 
@@ -474,7 +486,9 @@ void exit(int code) {
 
   exec_enter(next_regs);
 
-  __builtin_unreachable();
+  while (true) {
+    asm volatile("sti; hlt");
+  }
 }
 
 Process *clone(Process *parent) {

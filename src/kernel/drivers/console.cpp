@@ -22,17 +22,9 @@ static uint32_t screen_height;
 
 static uint32_t scale = 1;
 
-static volatile bool console_locked = false;
+void lock() {}
 
-void lock() {
-  while (__atomic_test_and_set(&console_locked, __ATOMIC_ACQUIRE)) {
-    asm volatile("pause");
-  }
-}
-
-void unlock() {
-  __atomic_clear(&console_locked, __ATOMIC_RELEASE);
-}
+void unlock() {}
 
 void clear();
 
@@ -94,7 +86,7 @@ void scroll() {
 
   uint32_t move = pitch * (screen_height - font->height);
 
-  memcpy(fb, fb + pitch * font->height, move);
+  memmove(fb, fb + pitch * font->height, move);
 
   memset(fb + move, 0, pitch * font->height);
 }

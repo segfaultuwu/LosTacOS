@@ -21,12 +21,12 @@ namespace {
 
 constexpr int MAX_FDS = 32;
 
+using sched::FD_FILE;
+using sched::FD_NONE;
+using sched::FD_PIPE;
+using sched::FdEntry;
 using sched::FDType;
 using sched::Pipe;
-using sched::FdEntry;
-using sched::FD_NONE;
-using sched::FD_FILE;
-using sched::FD_PIPE;
 
 static Pipe pipes[32];
 static bool pipe_used[32];
@@ -192,7 +192,8 @@ static uint64_t sys_read(uint64_t a, uint64_t b, uint64_t c) {
   if (!entry || entry->type == FD_NONE)
     return (uint64_t)-1;
 
-  if (!entry->node && entry->mount && entry->fs_handle && entry->mount->fs && entry->mount->fs->read) {
+  if (!entry->node && entry->mount && entry->fs_handle && entry->mount->fs &&
+      entry->mount->fs->read) {
     return entry->mount->fs->read(entry->fs_handle, buf, len);
   }
 
@@ -419,10 +420,6 @@ static uint64_t sys_wait(uint64_t a) {
       }
       return 0;
     }
-
-    sched::Task *curr = sched::get_current();
-    if (curr)
-      curr->state = sched::State::BLOCKED;
 
     sched::yield();
   }

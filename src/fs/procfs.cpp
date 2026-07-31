@@ -12,6 +12,8 @@
 
 #include <string.h>
 
+// Yes i know some of the values are placeholders now fuck off
+
 namespace multiboot2 {
 extern char boot_cmdline[256];
 }

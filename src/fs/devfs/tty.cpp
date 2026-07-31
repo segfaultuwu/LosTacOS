@@ -91,14 +91,11 @@ static size_t read_canonical(char *buf, size_t len) {
 // Raw mode: no line editing, no waiting for a newline. Returns as soon as
 // there's at least one byte (VMIN == 0 means "don't even block for that").
 static size_t read_raw(char *buf, size_t len) {
-  bool echo = tio.c_lflag & ECHO;
+  if (len == 0)
+    return 0;
 
-  if (stdin_len == 0) {
-    if (tio.c_cc[VMIN] == 0)
-      return 0;
-
-    while (stdin_len == 0)
-      asm volatile("sti; hlt");
+  while (stdin_len == 0) {
+    asm volatile("sti; hlt");
   }
 
   size_t n = 0;

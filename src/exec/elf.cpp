@@ -90,10 +90,6 @@ uint64_t load(const char *path, mm::AddressSpace *space) {
       paging::map_page(space->table->pml4, addr, phys, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
       void *dst = page;
 
-      uint64_t virt = addr;
-
-      paging::map_page(pml4, virt, phys, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
-
       // Copy whatever slice of the file's content overlaps this page.
       // The file-backed range within this segment is
       // [seg_vaddr, seg_vaddr + seg_filesz); write through the
