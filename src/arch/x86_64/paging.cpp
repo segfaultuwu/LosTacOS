@@ -259,47 +259,49 @@ uint64_t *create_address_space() {
 }
 
 void clone_user_pages(uint64_t *dst_pml4, uint64_t *src_pml4) {
-  if (!(src_pml4[0] & PAGE_PRESENT))
-    return;
-
-  uint64_t *src_pdpt = (uint64_t *)(src_pml4[0] & ~0xFFFULL);
-  if (!src_pdpt)
-    return;
-
-  for (int pi = 0; pi < 512; pi++) {
-    if (!(src_pdpt[pi] & PAGE_PRESENT))
+  for (int pml4i = 0; pml4i < 256; pml4i++) {
+    if (!(src_pml4[pml4i] & PAGE_PRESENT))
       continue;
 
-    uint64_t *src_pd = (uint64_t *)(src_pdpt[pi] & ~0xFFFULL);
+    uint64_t *src_pdpt = (uint64_t *)(src_pml4[pml4i] & ~0xFFFULL);
+    if (!src_pdpt)
+      continue;
 
-    for (int di = 0; di < 512; di++) {
-      if (!(src_pd[di] & PAGE_PRESENT))
+    for (int pi = 0; pi < 512; pi++) {
+      if (!(src_pdpt[pi] & PAGE_PRESENT))
         continue;
 
-      uint64_t *src_pt = (uint64_t *)(src_pd[di] & ~0xFFFULL);
+      uint64_t *src_pd = (uint64_t *)(src_pdpt[pi] & ~0xFFFULL);
 
-      for (int ti = 0; ti < 512; ti++) {
-        if (!(src_pt[ti] & PAGE_PRESENT))
+      for (int di = 0; di < 512; di++) {
+        if (!(src_pd[di] & PAGE_PRESENT))
           continue;
 
-        uint64_t flags = src_pt[ti] & 0xFFF;
-        if (!(flags & PAGE_USER))
-          continue;
+        uint64_t *src_pt = (uint64_t *)(src_pd[di] & ~0xFFFULL);
 
-        uint64_t va = ((uint64_t)pi << 30) | ((uint64_t)di << 21) | ((uint64_t)ti << 12);
-        uint64_t src_phys = src_pt[ti] & ~0xFFFULL;
+        for (int ti = 0; ti < 512; ti++) {
+          if (!(src_pt[ti] & PAGE_PRESENT))
+            continue;
 
-        void *dst_page = alloc_page();
-        if (!dst_page)
-          continue;
+          uint64_t flags = src_pt[ti] & 0xFFF;
+          if (!(flags & PAGE_USER))
+            continue;
 
-        uint64_t *src = (uint64_t *)(src_phys);
-        uint64_t *dst = (uint64_t *)dst_page;
+          uint64_t va = ((uint64_t)pml4i << 39) | ((uint64_t)pi << 30) | ((uint64_t)di << 21) | ((uint64_t)ti << 12);
+          uint64_t src_phys = src_pt[ti] & ~0xFFFULL;
 
-        for (int w = 0; w < 512; w++)
-          dst[w] = src[w];
+          void *dst_page = alloc_page();
+          if (!dst_page)
+            continue;
 
-        map_page(dst_pml4, va, (uint64_t)dst_page, flags);
+          uint64_t *src = (uint64_t *)(src_phys);
+          uint64_t *dst = (uint64_t *)dst_page;
+
+          for (int w = 0; w < 512; w++)
+            dst[w] = src[w];
+
+          map_page(dst_pml4, va, (uint64_t)dst_page, flags);
+        }
       }
     }
   }

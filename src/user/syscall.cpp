@@ -459,6 +459,8 @@ static uint64_t sys_fork() {
   if (!parent)
     return (uint64_t)-1;
 
+  parent->main_thread = parent_task;
+
   sched::Process *child = sched::clone(parent);
 
   if (!child)

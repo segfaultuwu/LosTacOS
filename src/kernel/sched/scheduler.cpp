@@ -453,9 +453,6 @@ Task *spawn(const char *path, char **argv) {
   task->parent = current_task;
   task->exit_code = 0;
 
-  task->next = head;
-  head = task;
-
   return task;
 }
 
@@ -497,6 +494,11 @@ Process *clone(Process *parent) {
     heap::kfree(child);
     return nullptr;
   }
+
+  strncpy(child->name, parent->name, sizeof(child->name) - 1);
+  child->mmap_next = parent->mmap_next;
+  child->cwd = parent->cwd;
+  child->parent = parent;
 
   memcpy(child->fds, parent->fds, sizeof(child->fds));
 
@@ -550,11 +552,14 @@ void add(Task *task) {
   }
 
   Task *t = head;
-
-  while (t->next)
+  while (t->next) {
+    if (t == task)
+      return;
     t = t->next;
+  }
 
-  t->next = task;
+  if (t != task)
+    t->next = task;
 }
 
 void destroy_task(Task *task) {

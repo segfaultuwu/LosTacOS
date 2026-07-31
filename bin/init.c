@@ -33,14 +33,38 @@ int main() {
     close(fd2);
   }
 
-  printf("Launching /bin/sh..\n");
+  printf("Launching /bin/sh..\n\n");
 
   char *argv[] = {"sh", NULL};
-
   char *envp[] = {NULL};
 
-  execve("/bin/sh", argv, envp);
+  int pid = fork();
 
-  printf("execve(\"/bin/sh\") failed\n");
-  return 1;
+  if (pid < 0) {
+    printf("fork() failed\n");
+    return 1;
+  }
+
+  if (pid == 0) {
+    execve("/bin/sh", argv, envp);
+    printf("execve(\"/bin/sh\") failed\n");
+    exit(127);
+  }
+
+  while (1) {
+    int status = 0;
+    wait4(pid, &status, 0, NULL);
+
+    pid = fork();
+    if (pid < 0)
+      break;
+
+    if (pid == 0) {
+      execve("/bin/sh", argv, envp);
+      printf("execve(\"/bin/sh\") failed\n");
+      exit(127);
+    }
+  }
+
+  return 0;
 }
