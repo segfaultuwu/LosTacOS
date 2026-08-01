@@ -21,6 +21,14 @@
 #define MULTIBOOT_FRAMEBUFFER_TYPE_RGB 1
 #define MULTIBOOT_FRAMEBUFFER_TYPE_EGA_TEXT 2
 
+#define TAG_BOOT_LOADER_NAME 2
+
+struct multiboot_tag_boot_loader_name {
+  uint32_t type;
+  uint32_t size;
+  char name[];
+};
+
 struct multiboot_mmap_entry {
   uint64_t addr;
   uint64_t len;
@@ -104,6 +112,8 @@ template <typename Fn> void for_each_tag(uint64_t mbi_phys_addr, Fn fn) {
 void parse_info(uint64_t mbi_phys_addr);
 
 int list_modules(uint64_t mbi_phys_addr, struct multiboot_module *out, int max_count);
+
+const char *get_bootloader_name(uint64_t addr);
 
 #ifdef __cplusplus
 }

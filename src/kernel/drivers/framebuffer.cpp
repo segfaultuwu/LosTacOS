@@ -1,6 +1,8 @@
 #include "LTOS/drivers/framebuffer.hpp"
+#include "LTOS/boot.hpp"
 #include "LTOS/drivers/serial.hpp"
 #include "LTOS/mm/heap.hpp"
+#include "LTOS/panic.hpp"
 #include <stdint.h>
 #include <string.h>
 
@@ -19,22 +21,16 @@ void init(uint64_t addr) {
   // Autodetect Limine vs GRUB framebuffer initialization
   bool ok = false;
 
-  if (limine::available()) {
-    ok = limine::init(addr, &info);
-
-    if (ok) {
-      strcpy(bootloader, "limine\n");
-    }
-  } else if (grub::available()) {
-    ok = grub::init(addr, &info);
-
-    if (ok) {
-      strcpy(bootloader, "grub\n");
-    }
+  if (boot_info.bootloader == Bootloader::Limine) {
+    framebuffer::limine::init(addr, &info);
+    ok = true;
+  } else if (boot_info.bootloader == Bootloader::Grub) {
+    framebuffer::grub::init(addr, &info);
+    ok = true;
   }
 
   if (!ok) {
-    strcpy(bootloader, "unknown\n");
+    panic::halt("No framebuffer");
   }
 
   if (!ok) {

@@ -44,8 +44,8 @@ iso: $(KERNEL) tarfs
 	$(BUILD)/isodir/limine.conf
 
 
-	@if [ "$(BOOTLOADER)" = "limine" ] && command -v limine >/dev/null 2>&1 && [ -f /usr/share/limine/limine-bios-cd.bin ]; then \
-		echo "Building ISO with default bootloader: Limine"; \
+	@if [ "$(BOOTLOADER)" = "limine" ]; then \
+		echo "Building ISO with Limine"; \
 		cp /usr/share/limine/limine-bios-cd.bin $(BUILD)/isodir/boot/; \
 		cp /usr/share/limine/limine-bios.sys $(BUILD)/isodir/boot/; \
 		if [ -f /usr/share/limine/limine-uefi-cd.bin ]; then \
@@ -67,8 +67,10 @@ iso: $(KERNEL) tarfs
 		fi; \
 		limine bios-install $(ISO); \
 	else \
-		echo "Limine not found. Falling back to GRUB bootloader"; \
-		grub-mkrescue -o $(ISO) $(BUILD)/isodir; \
+    if [ "$(BOOTLOADER)" = "grub" ]; then \
+      echo "Building ISO with GRUB"; \
+      grub-mkrescue -o $(ISO) $(BUILD)/isodir; \
+    fi \
 	fi
 
 

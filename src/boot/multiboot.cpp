@@ -14,6 +14,22 @@ char boot_cmdline[256] = "BOOT_IMAGE=/boot/kernel.elf quiet";
 static uint32_t rootfs_start = 0;
 static uint32_t rootfs_size = 0;
 
+const char *get_bootloader_name(uint64_t addr) {
+  auto *tag = (multiboot_tag *)((uint8_t *)addr + 8);
+
+  while (tag->type != 0) {
+    if (tag->type == TAG_BOOT_LOADER_NAME) {
+      auto *name = (multiboot_tag_boot_loader_name *)tag;
+
+      return name->name;
+    }
+
+    tag = (multiboot_tag *)((uint8_t *)tag + ((tag->size + 7) & ~7));
+  }
+
+  return "unknown";
+}
+
 void parse_info(uint64_t mbi_phys_addr) {
   for_each_tag(mbi_phys_addr, [](struct multiboot_tag *tag) {
     switch (tag->type) {

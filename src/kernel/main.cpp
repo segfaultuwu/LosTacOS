@@ -1,6 +1,7 @@
 #include "LTOS/arch/x86_64/cpu.hpp"
 #include "LTOS/arch/x86_64/gdt.hpp"
 #include "LTOS/arch/x86_64/idt.hpp"
+#include "LTOS/boot.hpp"
 #include "LTOS/mm/paging.hpp"
 
 #include "LTOS/drivers/ahci.hpp"
@@ -31,8 +32,8 @@
 
 #include "LTOS/arch/x86_64/sse.hpp"
 
-#include <cstddef>
 #include <stdint.h>
+#include <string.h>
 
 namespace multiboot2 {
 void mount_rootfs();
@@ -40,7 +41,7 @@ void mount_rootfs();
 
 bool state::vfs_initialized = false;
 
-extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
+extern "C" void kernel_main(uint64_t magic, uint64_t info) {
   asm volatile("cli");
 
   //
@@ -48,14 +49,36 @@ extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
   //
 
   drivers::serial::init();
+  drivers::serial::writef("kernel_main\n");
 
-  drivers::serial::writef("kernel_main");
+  //
+  // Bootloader shit
+  //
+  //
+
+  const char *name = multiboot2::get_bootloader_name(info);
+
+  boot_info.multiboot_addr = info;
+
+  if (strstr(name, "Limine")) {
+    boot_info.bootloader = Bootloader::Limine;
+
+    drivers::serial::writef("Bootloader: LIMINE (%s)\n", name);
+  } else if (strstr(name, "GRUB")) {
+    boot_info.bootloader = Bootloader::Grub;
+
+    drivers::serial::writef("Bootloader: GRUB (%s)\n", name);
+  } else {
+    boot_info.bootloader = Bootloader::Unknown;
+
+    drivers::serial::writef("Bootloader: UNKNOWN (%s)\n", name);
+  }
 
   //
   // Boot info
   //
 
-  multiboot2::parse_info(mbi_addr);
+  multiboot2::parse_info(boot_info.multiboot_addr);
 
   //
   // CPU
@@ -73,7 +96,7 @@ extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
   // Memory
   //
 
-  pmm::init(mbi_addr);
+  pmm::init(boot_info.multiboot_addr);
   vmm::init(paging::kernel_pml4);
   paging::init();
   paging::setup_kernel_identity();
@@ -88,10 +111,10 @@ extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
   //
   // Load GZIP compressed font & rootfs after Heap is ready
   //
-  psf::find_font(mbi_addr);
+  psf::find_font(boot_info.multiboot_addr);
   multiboot2::mount_rootfs();
 
-  arch::cpu::init(mbi_addr);
+  arch::cpu::init(boot_info.multiboot_addr);
 
   //
   // Graphics

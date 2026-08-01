@@ -1,5 +1,6 @@
 #include "LTOS/fs/procfs.hpp"
 #include "LTOS/arch/x86_64/cpu.hpp"
+#include "LTOS/boot.hpp"
 #include "LTOS/drivers/framebuffer.hpp"
 #include "LTOS/drivers/timer.hpp"
 #include "LTOS/fs/fs.hpp"
@@ -65,7 +66,16 @@ static uint64_t count_user_pages(mm::AddressSpace *space) {
 }
 
 static const char *get_bootloader() {
-  ksnprintf(buffer, sizeof(buffer), framebuffer::get_bootloader());
+  static char buffer[256];
+
+  if (boot_info.bootloader == Bootloader::Limine) {
+    ksnprintf(buffer, sizeof(buffer), "limine\n");
+  } else if (boot_info.bootloader == Bootloader::Grub) {
+    ksnprintf(buffer, sizeof(buffer), "grub\n");
+  } else {
+    ksnprintf(buffer, sizeof(buffer), "unknown\n");
+  }
+
   return buffer;
 }
 
@@ -249,12 +259,12 @@ static const char *get_diskstats() {
 //   uint64_t ticks = timer::ticks();
 //   ksnprintf(buffer, sizeof(buffer),
 //             "Inter-|   Receive                                                |  Transmit\n"
-//             " face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets "
-//             "errs drop fifo colls carrier compressed\n"
-//             "    lo: %7lu   %5lu    0    0    0     0          0         0  %7lu   %5lu    0    0
-//             " "  0     0       0          0\n" "  eth0: %7lu   %5lu    0    0    0     0 0 0 %7lu
-//             %5lu    0    0  " "  0     0       0          0\n", ticks * 128, ticks, ticks * 128,
-//             ticks, ticks * 1024, ticks * 8, ticks * 512, ticks * 4);
+//             " face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets
+//             " "errs drop fifo colls carrier compressed\n" "    lo: %7lu   %5lu    0    0    0
+//             0          0         0  %7lu   %5lu    0    0 " "  0     0       0          0\n" "
+//             eth0: %7lu   %5lu    0    0    0     0 0 0 %7lu %5lu    0    0  " "  0     0 0
+//             0\n", ticks * 128, ticks, ticks * 128, ticks, ticks * 1024, ticks * 8, ticks * 512,
+//             ticks * 4);
 //   return buffer;
 // }
 
