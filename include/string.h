@@ -25,6 +25,8 @@ char *strcat(char *dest, const char *src);
 
 int strcmp(const char *a, const char *b);
 
+char *strdup(const char *s);
+
 int strncmp(const char *a, const char *b, size_t n);
 
 int strsplt(char *str, char *argv[], int max_args);

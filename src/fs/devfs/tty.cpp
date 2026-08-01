@@ -67,19 +67,25 @@ static size_t read_canonical(char *buf, size_t len) {
 
     char c = pop_raw_byte();
 
-    // Erase actually erases now: it removes the previous character from
-    // the line instead of being appended as a literal 0x08 byte (which is
-    // what every reader used to receive -- backspace looked fine on
-    // screen because console::put() special-cases 0x08, but the string a
-    // program got back still had the raw erase byte sitting inside it).
-    if (erase && c == erase) {
+    if (c == 0x08 || c == 127 || (erase && c == erase)) {
       if (n > 0) {
         n--;
+        if (echo) {
+          console::put(0x08);
+          drivers::serial::write('\b');
+          drivers::serial::write(' ');
+          drivers::serial::write('\b');
+        }
       }
       continue;
     }
 
     buf[n++] = c;
+
+    if (echo) {
+      console::put(c);
+      drivers::serial::write(c);
+    }
 
     if (c == '\n')
       break;

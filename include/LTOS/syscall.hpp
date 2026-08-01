@@ -20,6 +20,11 @@ enum Syscall {
 
   SYS_IOCTL = 16,
 
+  SYS_GETCWD = 79,
+  SYS_CHDIR = 80,
+  SYS_MKDIR = 83,
+  SYS_RMDIR = 84,
+  SYS_UNLINK = 87,
   SYS_GETTIMEOFDAY = 96,
 
   SYS_DUP = 32,

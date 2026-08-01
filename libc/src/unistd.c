@@ -1,4 +1,5 @@
 #include <fcntl.h>
+#include <stddef.h>
 
 #include <sys/syscall.h>
 #include <unistd.h>
@@ -23,6 +24,25 @@ int open(const char *path, int flags, ...) {
   va_end(args);
 
   return (int)syscall(SYS_OPEN, (long)path, flags, mode);
+}
+
+char *getcwd(char *buf, size_t size) {
+  if (!buf || size == 0)
+    return NULL;
+
+  long ret = syscall(SYS_GETCWD, (long)buf, size, 0);
+
+  if (ret < 0)
+    return NULL;
+
+  return buf;
+}
+
+int chdir(const char *path) {
+  if (!path)
+    return -1;
+
+  return syscall(SYS_CHDIR, (long)path, 0, 0);
 }
 
 int close(int fd) {
@@ -65,6 +85,11 @@ int nanosleep(const struct timespec *req, struct timespec *rem) {
   return (int)syscall(SYS_NANOSLEEP, (long)req, (long)rem, 0);
 }
 
+unsigned int sleep(unsigned int seconds) {
+  syscall(SYS_SLEEP, (long)seconds * 1000, 0, 0);
+  return 0;
+}
+
 pid_t wait4(pid_t pid, int *status, int options, void *rusage) {
   return (pid_t)syscall(SYS_WAIT4, pid, (long)status, options, (long)rusage);
 }
@@ -75,4 +100,27 @@ off_t lseek(int fd, off_t offset, int whence) {
 
 int sys_readdir(int fd, struct dirent *ent) {
   return (int)syscall(SYS_READDIR, fd, (long)ent, 0);
+}
+
+int unlink(const char *path) {
+  if (!path)
+    return -1;
+  return (int)syscall(SYS_UNLINK, (long)path, 0, 0);
+}
+
+int remove(const char *path) {
+  return unlink(path);
+}
+
+int mkdir(const char *path, mode_t mode) {
+  (void)mode;
+  if (!path)
+    return -1;
+  return (int)syscall(SYS_MKDIR, (long)path, 0, 0);
+}
+
+int rmdir(const char *path) {
+  if (!path)
+    return -1;
+  return (int)syscall(SYS_RMDIR, (long)path, 0, 0);
 }

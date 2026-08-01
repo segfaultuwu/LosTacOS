@@ -18,8 +18,10 @@ void init(uint64_t addr);
 void init_backbuffer();
 
 void put_pixel(int x, int y, uint32_t color);
+uint32_t get_pixel(int x, int y);
 void clear(uint32_t color);
 void swap();
+void swap_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h);
 
 uint32_t get_width();
 uint32_t get_height();
@@ -28,5 +30,6 @@ uint32_t get_bpp();
 
 uint8_t *get_address();
 uint8_t *get_backbuffer();
+uint8_t *get_frontbuffer();
 
 } // namespace framebuffer

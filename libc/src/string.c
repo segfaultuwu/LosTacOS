@@ -157,3 +157,61 @@ int strsplt(char *str, char *argv[], int max_args) {
 
   return argc;
 }
+
+char *strchr(const char *s, int c) {
+  while (*s) {
+    if (*s == (char)c)
+      return (char *)s;
+    s++;
+  }
+  if (c == '\0')
+    return (char *)s;
+  return NULL;
+}
+
+char *strrchr(const char *s, int c) {
+  const char *last = NULL;
+  do {
+    if (*s == (char)c)
+      last = s;
+  } while (*s++);
+  return (char *)last;
+}
+
+char *strstr(const char *haystack, const char *needle) {
+  if (!*needle)
+    return (char *)haystack;
+  for (const char *h = haystack; *h; h++) {
+    if (*h == *needle) {
+      const char *h_iter = h;
+      const char *n_iter = needle;
+      while (*h_iter && *n_iter && *h_iter == *n_iter) {
+        h_iter++;
+        n_iter++;
+      }
+      if (!*n_iter)
+        return (char *)h;
+    }
+  }
+  return NULL;
+}
+
+char *strncat(char *dest, const char *src, size_t n) {
+  char *ret = dest;
+  while (*dest)
+    dest++;
+  while (n-- && *src)
+    *dest++ = *src++;
+  *dest = '\0';
+  return ret;
+}
+
+void *memchr(const void *s, int c, size_t n) {
+  const unsigned char *p = (const unsigned char *)s;
+  while (n--) {
+    if (*p == (unsigned char)c)
+      return (void *)p;
+    p++;
+  }
+  return NULL;
+}

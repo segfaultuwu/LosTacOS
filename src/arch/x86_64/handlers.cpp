@@ -1,3 +1,4 @@
+#include "LTOS/drivers/console.hpp"
 #include "LTOS/drivers/framebuffer.hpp"
 #include "LTOS/drivers/keyboard.hpp"
 #include "LTOS/drivers/pic.hpp"
@@ -8,6 +9,7 @@
 
 extern "C" sched::Registers *timer_irq(sched::Registers *regs) {
   timer::tick();
+  console::cursor_tick();
 
   drivers::pic::eoi(0);
 

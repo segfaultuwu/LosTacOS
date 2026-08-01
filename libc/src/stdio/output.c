@@ -1,17 +1,27 @@
 #include <stdarg.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <sys/syscall.h>
+#include <unistd.h>
 
 static void write_buf(const char *buf, size_t len) {
   syscall(SYS_WRITE, 1, (long)buf, len);
 }
 
-int putc(int c) {
+int fputc(int c, FILE *stream) {
+  if (!stream)
+    return EOF;
   char ch = (char)c;
+  long ret = write(stream->fd, &ch, 1);
+  if (ret <= 0) {
+    stream->error = 1;
+    return EOF;
+  }
+  return (unsigned char)c;
+}
 
-  write_buf(&ch, 1);
-
-  return c;
+int putc(int c, FILE *stream) {
+  return fputc(c, stream);
 }
 
 int puts(const char *s) {
@@ -24,6 +34,32 @@ int puts(const char *s) {
   write_buf("\n", 1);
 
   return 0;
+}
+
+int fputs(const char *s, FILE *stream) {
+  if (!s || !stream)
+    return EOF;
+  size_t len = 0;
+  while (s[len])
+    len++;
+  long ret = write(stream->fd, s, len);
+  if (ret < 0) {
+    stream->error = 1;
+    return EOF;
+  }
+  return (int)ret;
+}
+
+size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) {
+  if (!ptr || !stream || size == 0 || nmemb == 0)
+    return 0;
+  size_t total = size * nmemb;
+  long ret = write(stream->fd, ptr, total);
+  if (ret < 0) {
+    stream->error = 1;
+    return 0;
+  }
+  return (size_t)(ret / size);
 }
 
 static void buf_putc(char *buf, size_t size, size_t *pos, char c) {

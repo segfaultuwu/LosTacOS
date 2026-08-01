@@ -58,6 +58,9 @@
 
 #define SYS_GETCWD 79
 #define SYS_CHDIR 80
+#define SYS_MKDIR 83
+#define SYS_RMDIR 84
+#define SYS_UNLINK 87
 
 #define SYS_GETDENTS64 217
 
@@ -72,6 +75,7 @@
  * LosTacOS extensions
  */
 
+#define SYS_SLEEP 499
 #define SYS_READDIR 500
 #define SYS_OPENDIR 501
 #define SYS_CLOSEDIR 502

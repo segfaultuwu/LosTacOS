@@ -1,3 +1,4 @@
+#include "LTOS/arch/x86_64/cpu.hpp"
 #include "LTOS/arch/x86_64/gdt.hpp"
 #include "LTOS/arch/x86_64/idt.hpp"
 #include "LTOS/arch/x86_64/paging.hpp"
@@ -11,7 +12,9 @@
 #include "LTOS/drivers/tty.hpp"
 
 #include "LTOS/fs/devfs.hpp"
+#include "LTOS/fs/fs.hpp"
 #include "LTOS/fs/procfs.hpp"
+#include "LTOS/fs/sysfs.hpp"
 #include "LTOS/fs/tarfs.hpp"
 #include "LTOS/fs/vfs.hpp"
 
@@ -78,6 +81,8 @@ extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
 
   heap::init();
 
+  arch::cpu::init(mbi_addr);
+
   //
   // Graphics
   //
@@ -98,6 +103,7 @@ extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
 
   fs::mount("/proc", &fs::procfs::filesystem, nullptr);
   fs::mount("/dev", &fs::devfs::filesystem, nullptr);
+  fs::mount("/sys", &fs::sysfs::filesystem, nullptr);
 
   fs::devfs::init_null();
   fs::devfs::init_fb();

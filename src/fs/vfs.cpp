@@ -1,37 +1,18 @@
 #include "LTOS/fs/vfs.hpp"
-#include "LTOS/fs/devfs.hpp"
-#include "LTOS/fs/tarfs.hpp"
 #include "LTOS/lib/kprintf.h"
 #include "LTOS/mm/heap.hpp"
+#include "LTOS/sched/process.hpp"
+#include "LTOS/sched/scheduler.hpp"
+#include "LTOS/sched/task.hpp"
 #include "LTOS/state.hpp"
 
 #include <stddef.h>
-#include <stdint.h>
 #include <string.h>
 
 namespace fs::vfs {
 
 Node *root = nullptr;
 Node *current_dir = nullptr;
-
-static char *strdup(const char *s) {
-  size_t len = 0;
-
-  while (s[len])
-    len++;
-
-  char *out = (char *)heap::kmalloc(len + 1);
-
-  if (!out)
-    return nullptr;
-
-  for (size_t i = 0; i < len; i++)
-    out[i] = s[i];
-
-  out[len] = 0;
-
-  return out;
-}
 
 void init() {
   root = (Node *)heap::kmalloc(sizeof(Node));
@@ -288,8 +269,14 @@ Node *find(const char *path) {
 
   if (path[0] == '/')
     node = root;
-  else
-    node = current_dir;
+  else {
+    sched::Task *task = sched::get_current();
+
+    if (task && task->process && task->process->cwd)
+      node = task->process->cwd;
+    else
+      node = root;
+  }
 
   char part[128];
   size_t i = 0;
@@ -404,6 +391,15 @@ Node *find_in(Node *dir, const char *name) {
   return nullptr;
 }
 
+Node *get_process_cwd() {
+  sched::Task *task = sched::get_current();
+
+  if (task && task->process && task->process->cwd)
+    return task->process->cwd;
+
+  return root;
+}
+
 char *get_path(Node *node) {
   static char path[1024];
   char temp[1024];
@@ -419,49 +415,28 @@ char *get_path(Node *node) {
   temp[0] = 0;
 
   while (node && node != root) {
-    char segment[128];
-    size_t slen = 0;
-
-    while (node->name[slen])
-      slen++;
-
-    // copy name
-    for (size_t i = 0; i < slen; i++)
-      segment[i] = node->name[i];
-
-    segment[slen] = 0;
-
-    // prepend: "/name"
     char newtemp[1024];
+
+    size_t slen = strlen(node->name);
+
     newtemp[0] = '/';
 
-    size_t i = 1;
+    for (size_t i = 0; i < slen; i++)
+      newtemp[i + 1] = node->name[i];
 
-    for (size_t j = 0; j < slen; j++)
-      newtemp[i++] = segment[j];
+    size_t pos = slen + 1;
 
-    for (size_t j = 0; temp[j]; j++)
-      newtemp[i++] = temp[j];
+    for (size_t i = 0; temp[i]; i++)
+      newtemp[pos++] = temp[i];
 
-    newtemp[i] = 0;
+    newtemp[pos] = 0;
 
-    // copy back
-    for (size_t j = 0; j <= i; j++)
-      temp[j] = newtemp[j];
+    strcpy(temp, newtemp);
 
     node = node->parent;
   }
 
-  for (size_t i = 0; temp[i]; i++)
-    path[i] = temp[i];
-
-  path[len = 0];
-  while (temp[len]) {
-    path[len] = temp[len];
-    len++;
-  }
-
-  path[len] = 0;
+  strcpy(path, temp);
 
   return path;
 }

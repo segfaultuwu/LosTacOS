@@ -1,6 +1,7 @@
 #include "LTOS/drivers/keyboard.hpp"
 #include "LTOS/drivers/console.hpp"
 #include "LTOS/drivers/serial.hpp"
+#include "LTOS/drivers/timer.hpp"
 #include "LTOS/lib/kprintf.h"
 #include <stdint.h>
 
@@ -458,18 +459,17 @@ char *getstring() {
   return buffer;
 }
 
-void irq_handler() {
-  uint8_t sc = drivers::serial::inb(KBD_DATA);
+static uint8_t last_raw_scancode = 0;
+static uint64_t last_scancode_tick = 0;
 
-  // 0xE0 is a lead byte, not a key itself: it means "the next byte is one
-  // of the extended keys" (arrows, Insert/Delete/Home/End/PageUp/PageDown,
-  // right Ctrl/Alt, numpad Enter/Divide). It carries no press/release bit
-  // of its own, so just remember it and wait for the following byte.
-  //
-  // 0xE1 (Pause's lead byte) is deliberately swallowed here too: Pause's
-  // sequence doesn't fit this model at all (six bytes, no release code),
-  // so the best this driver can do without properly parsing it is avoid
-  // letting it desync `extended` for the *next* real key.
+static void process_scancode(uint8_t sc) {
+  uint64_t now = timer::ticks();
+  if (sc == last_raw_scancode && (now - last_scancode_tick < 15)) {
+    return;
+  }
+  last_raw_scancode = sc;
+  last_scancode_tick = now;
+
   static bool extended = false;
   if (sc == 0xE0) {
     extended = true;
@@ -518,13 +518,53 @@ void irq_handler() {
 
   char keychar = key_to_ascii(key);
 
-  if (keychar != 0 && stdin_len < sizeof(stdin_buffer)) {
-    stdin_buffer[stdin_len] = keychar;
-    stdin_len = stdin_len + 1;
+  if (keychar != 0) {
+    if (stdin_len < sizeof(stdin_buffer)) {
+      stdin_buffer[stdin_len++] = keychar;
+    }
+  } else {
+    const char *seq = nullptr;
+    switch (key) {
+    case KEY_ARROW_UP:
+      seq = "\033[A";
+      break;
+    case KEY_ARROW_DOWN:
+      seq = "\033[B";
+      break;
+    case KEY_ARROW_RIGHT:
+      seq = "\033[C";
+      break;
+    case KEY_ARROW_LEFT:
+      seq = "\033[D";
+      break;
+    case KEY_HOME:
+      seq = "\033[H";
+      break;
+    case KEY_END:
+      seq = "\033[F";
+      break;
+    case KEY_DELETE:
+      seq = "\033[3~";
+      break;
+    default:
+      break;
+    }
+    if (seq) {
+      while (*seq && stdin_len < sizeof(stdin_buffer)) {
+        stdin_buffer[stdin_len++] = *seq++;
+      }
+    }
   }
 
   push_event(
       {.key = key, .pressed = true, .shift = shift, .ctrl = ctrl, .alt = alt, .scancode = sc});
+}
+
+void irq_handler() {
+  while (drivers::serial::inb(KBD_STATUS) & STATUS_OUTPUT_FULL) {
+    uint8_t sc = drivers::serial::inb(KBD_DATA);
+    process_scancode(sc);
+  }
 }
 
 } // namespace drivers::keyboard

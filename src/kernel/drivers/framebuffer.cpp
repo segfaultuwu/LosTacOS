@@ -81,8 +81,44 @@ void put_pixel(int x, int y, uint32_t color) {
   }
 }
 
+uint32_t get_pixel(int x, int y) {
+  if (!backbuffer || x < 0 || y < 0 || x >= (int)info.width || y >= (int)info.height)
+    return 0;
+
+  uint8_t *pixel = backbuffer + y * info.pitch + x * (info.bpp / 8);
+
+  switch (info.bpp) {
+  case 32:
+    return *(uint32_t *)pixel;
+  case 24:
+    return (uint32_t)pixel[0] | ((uint32_t)pixel[1] << 8) | ((uint32_t)pixel[2] << 16);
+  case 16:
+    return *(uint16_t *)pixel;
+  default:
+    return 0;
+  }
+}
+
 uint8_t *get_backbuffer() {
   return backbuffer;
+}
+
+uint8_t *get_frontbuffer() {
+  return frontbuffer;
+}
+
+void swap_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h) {
+  uint32_t pitch = get_pitch();
+  uint8_t *back = get_backbuffer();
+  uint8_t *front = get_frontbuffer();
+
+  uint32_t bytes_per_px = pitch / get_width();
+
+  for (uint32_t row = y; row < y + h && row < get_height(); row++) {
+    uint32_t off = row * pitch + x * bytes_per_px;
+    uint32_t len = w * bytes_per_px;
+    memcpy(front + off, back + off, len);
+  }
 }
 
 void swap() {

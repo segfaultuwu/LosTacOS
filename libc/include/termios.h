@@ -27,6 +27,10 @@ struct termios {
 #define TCSETSW 0x5403
 #define TCSETSF 0x5404
 
+#ifndef TCSANOW
+#define TCSANOW TCSETS
+#endif
+
 /* input flags */
 #define IGNBRK 0000001
 #define BRKINT 0000002

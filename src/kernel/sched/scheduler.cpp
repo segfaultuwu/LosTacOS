@@ -2,6 +2,7 @@
 #include "LTOS/arch/x86_64/gdt.hpp"
 #include "LTOS/arch/x86_64/paging.hpp"
 #include "LTOS/exec/elf.hpp"
+#include "LTOS/fs/vfs.hpp"
 #include "LTOS/lib/kprintf.h"
 #include "LTOS/logger.hpp"
 #include "LTOS/mm/address_space.hpp"
@@ -124,7 +125,7 @@ static Task *create_task(Process *proc, uint64_t entry) {
   r->vector = 0;
   r->error = 0;
 
-  task->pid = pid_counter++;
+  task->pid = proc ? proc->pid : pid_counter++;
 
   task->regs = r;
 
@@ -313,6 +314,8 @@ bool exec_current(const char *path, char **argv, char **envp) {
 
   proc->space = new_space;
   proc->mmap_next = 0;
+  strncpy(proc->name, path, sizeof(proc->name) - 1);
+  proc->name[sizeof(proc->name) - 1] = '\0';
 
   new_space->activate();
 
@@ -447,6 +450,9 @@ Task *spawn(const char *path, char **argv) {
   memset(proc, 0, sizeof(Process));
 
   proc->pid = pid_counter++;
+  proc->cwd = fs::vfs::find("/");
+  strncpy(proc->name, path, sizeof(proc->name) - 1);
+  proc->name[sizeof(proc->name) - 1] = '\0';
 
   proc->space = mm::AddressSpace::create();
   if (!proc->space)
@@ -515,6 +521,14 @@ Process *clone(Process *parent) {
   child->parent = parent;
 
   memcpy(child->fds, parent->fds, sizeof(child->fds));
+  for (int i = 0; i < 32; i++) {
+    if (child->fds[i].type == FD_PIPE && child->fds[i].pipe) {
+      if (child->fds[i].readable)
+        child->fds[i].pipe->readers++;
+      if (child->fds[i].writable)
+        child->fds[i].pipe->writers++;
+    }
+  }
 
   paging::clone_user_pages(child->space->table->pml4, parent->space->table->pml4);
 

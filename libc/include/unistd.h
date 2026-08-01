@@ -77,6 +77,8 @@ int sched_yield(void);
 
 int nanosleep(const struct timespec *req, struct timespec *rem);
 
+unsigned int sleep(unsigned int seconds);
+
 /* files */
 
 off_t lseek(int fd, off_t offset, int whence);
@@ -84,6 +86,8 @@ off_t lseek(int fd, off_t offset, int whence);
 int unlink(const char *path);
 
 int mkdir(const char *path, mode_t mode);
+
+int rmdir(const char *path);
 
 int chdir(const char *path);
 

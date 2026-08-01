@@ -20,6 +20,8 @@ void backspace();
 
 void clear();
 
+void cursor_tick();
+
 void lock();
 void unlock();
 

@@ -6,6 +6,7 @@
 #include "LTOS/drivers/timer.hpp"
 #include "LTOS/drivers/tty.hpp"
 #include "LTOS/drivers/tty/ioctl.hpp"
+#include "LTOS/fs/procfs.hpp"
 #include "LTOS/fs/vfs.hpp"
 #include "LTOS/lib/kprintf.h"
 #include "LTOS/mm/heap.hpp"
@@ -204,6 +205,9 @@ static uint64_t sys_read(uint64_t a, uint64_t b, uint64_t c) {
     Pipe *p = entry->pipe;
 
     while (p->read_pos >= p->write_pos) {
+      if (p->writers <= 0) {
+        return 0;
+      }
       asm volatile("sti; hlt");
     }
 
@@ -211,6 +215,11 @@ static uint64_t sys_read(uint64_t a, uint64_t b, uint64_t c) {
 
     while (n < len && p->read_pos < p->write_pos) {
       buf[n++] = p->buffer[p->read_pos++];
+    }
+
+    if (p->read_pos >= p->write_pos) {
+      p->read_pos = 0;
+      p->write_pos = 0;
     }
 
     return n;
@@ -252,6 +261,21 @@ static uint64_t sys_read(uint64_t a, uint64_t b, uint64_t c) {
 
 static uint64_t sys_open(uint64_t a) {
   const char *path = (const char *)a;
+  if (!path)
+    return -1;
+
+  char abs_path[256];
+  if (path[0] != '/') {
+    sched::Task *task = sched::get_current();
+    const char *cwd = (task && task->process && task->process->cwd) ? fs::vfs::get_path(task->process->cwd) : "/";
+    size_t cwd_len = strlen(cwd);
+    if (cwd_len > 0 && cwd[cwd_len - 1] == '/') {
+      ksnprintf(abs_path, sizeof(abs_path), "%s%s", cwd, path);
+    } else {
+      ksnprintf(abs_path, sizeof(abs_path), "%s/%s", cwd, path);
+    }
+    path = abs_path;
+  }
 
   fs::Mount *mnt = fs::find_mount(path);
 
@@ -319,6 +343,30 @@ static uint64_t sys_close(uint64_t a) {
   memset(entry, 0, sizeof(FdEntry));
 
   return 0;
+}
+
+static void sys_close_all(sched::Process *proc) {
+  if (!proc)
+    return;
+  for (int i = 0; i < MAX_FDS; i++) {
+    if (proc->fds[i].type != FD_NONE) {
+      if (proc->fds[i].type == FD_PIPE && proc->fds[i].pipe) {
+        if (proc->fds[i].readable)
+          proc->fds[i].pipe->readers--;
+        if (proc->fds[i].writable)
+          proc->fds[i].pipe->writers--;
+        if (proc->fds[i].pipe->readers <= 0 && proc->fds[i].pipe->writers <= 0) {
+          for (int p = 0; p < 32; p++) {
+            if (&pipes[p] == proc->fds[i].pipe)
+              pipe_used[p] = false;
+          }
+        }
+      } else if (proc->fds[i].mount && proc->fds[i].fs_handle && proc->fds[i].mount->fs && proc->fds[i].mount->fs->close) {
+        proc->fds[i].mount->fs->close(proc->fds[i].fs_handle);
+      }
+      memset(&proc->fds[i], 0, sizeof(FdEntry));
+    }
+  }
 }
 
 static uint64_t sys_execve(uint64_t a, uint64_t b, uint64_t c) {
@@ -523,6 +571,50 @@ static uint64_t sys_readdir(uint64_t a, uint64_t b) {
   if (!entry || entry->type == FD_NONE || !out)
     return (uint64_t)-1;
 
+  // Handle directory handles opened via filesystem mount (e.g. procfs subdirectories like /proc/1)
+  if (!entry->node && entry->mount && entry->fs_handle && entry->mount->fs) {
+    fs::procfs::ProcFile *pf = (fs::procfs::ProcFile *)entry->fs_handle;
+    if (pf && pf->data) {
+      size_t line_index = 0;
+      const char *p = pf->data;
+      while (*p) {
+        const char *line_start = p;
+        while (*p && *p != '\n')
+          p++;
+        size_t line_len = p - line_start;
+        if (*p == '\n')
+          p++;
+
+        if (line_len > 0) {
+          if (line_index == entry->offset) {
+            memset(out, 0, sizeof(*out));
+            out->d_ino = 0;
+            out->d_off = entry->offset + 1;
+            out->d_reclen = sizeof(*out);
+
+            size_t copy_len = line_len < sizeof(out->d_name) - 1 ? line_len : sizeof(out->d_name) - 1;
+            memcpy(out->d_name, line_start, copy_len);
+            out->d_name[copy_len] = '\0';
+
+            if (strcmp(out->d_name, "fd") == 0 || strcmp(out->d_name, "fdinfo") == 0 ||
+                strcmp(out->d_name, "task") == 0 || strcmp(out->d_name, "cwd") == 0 ||
+                strcmp(out->d_name, "exe") == 0 || strcmp(out->d_name, "root") == 0) {
+              out->d_type = (strcmp(out->d_name, "cwd") == 0 || strcmp(out->d_name, "exe") == 0 ||
+                             strcmp(out->d_name, "root") == 0) ? fs::vfs::DT_LNK : fs::vfs::DT_DIR;
+            } else {
+              out->d_type = fs::vfs::DT_REG;
+            }
+
+            entry->offset++;
+            return 1;
+          }
+          line_index++;
+        }
+      }
+      return 0;
+    }
+  }
+
   auto *dir = entry->node;
 
   if (!dir || !dir->directory)
@@ -554,6 +646,30 @@ static uint64_t sys_readdir(uint64_t a, uint64_t b) {
     child = child->next;
   }
 
+  // Include active process PIDs when reading /proc directory
+  if (dir->filesystem == &fs::procfs::filesystem || (dir->name && strcmp(dir->name, "proc") == 0)) {
+    for (sched::Task *t = sched::head; t; t = t->next) {
+      if (index == entry->offset) {
+        memset(out, 0, sizeof(*out));
+
+        out->d_ino = t->pid;
+        out->d_off = entry->offset + 1;
+
+        out->d_reclen = sizeof(*out);
+
+        out->d_type = fs::vfs::DT_DIR;
+
+        ksnprintf(out->d_name, sizeof(out->d_name), "%lu", t->pid);
+
+        entry->offset++;
+
+        return 1;
+      }
+
+      index++;
+    }
+  }
+
   return 0;
 }
 
@@ -562,32 +678,16 @@ static uint64_t sys_ioctl(uint64_t a, uint64_t b, uint64_t c) {
   unsigned long req = b;
   void *arg = (void *)c;
 
-  if (req == TIOCGWINSZ) {
-    auto *ws = (winsize *)arg;
-
-    ws->ws_row = 25;
-    ws->ws_col = 80;
-
-    ws->ws_xpixel = 0;
-    ws->ws_ypixel = 0;
-
-    return 0;
+  if (fd == 0 || fd == 1 || fd == 2) {
+    return tty::ioctl(req, arg);
   }
 
-  if (req == TCGETS) {
-    auto *term = (termios *)arg;
-
-    memset(term, 0, sizeof(termios));
-
-    return 0;
+  FdEntry *entry = get_fd_entry(fd);
+  if (entry && entry->node && entry->node->dev && entry->node->dev->ioctl) {
+    return entry->node->dev->ioctl(req, arg);
   }
 
-  if (req == TCSETS) {
-    // here later raw mode
-    return 0;
-  }
-
-  return -1;
+  return tty::ioctl(req, arg);
 }
 
 static uint64_t sys_gettimeofday(uint64_t a) {
@@ -629,6 +729,8 @@ extern "C" uint64_t syscall_handler(uint64_t num, uint64_t a, uint64_t b, uint64
     return sys_fork();
 
   case SYS_EXIT:
+    if (sched::get_current())
+      sys_close_all(sched::get_current()->process);
     sched::exit(a);
     return 0;
 
@@ -673,6 +775,86 @@ extern "C" uint64_t syscall_handler(uint64_t num, uint64_t a, uint64_t b, uint64
 
   case SYS_GETTIMEOFDAY:
     return sys_gettimeofday(a);
+
+  case SYS_GETCWD: {
+    char *buf = (char *)a;
+    size_t size = b;
+
+    if (!buf || size == 0)
+      return -1;
+
+    sched::Process *p = sched::get_current()->process;
+
+    if (!p || !p->cwd)
+      return -1;
+
+    const char *path = fs::vfs::get_path(p->cwd);
+
+    if (!path)
+      return -1;
+
+    strncpy(buf, path, size - 1);
+    buf[size - 1] = '\0';
+
+    return 0;
+  }
+
+  case SYS_CHDIR: {
+    const char *path = (char *)a;
+
+    auto p = sched::get_current()->process;
+
+    auto node = fs::vfs::find(path);
+
+    if (!node)
+      return -1;
+
+    if (!node->directory)
+      return -1;
+
+    p->cwd = node;
+
+    return 0;
+  }
+
+  case SYS_UNLINK:
+  case SYS_RMDIR: {
+    const char *path = (const char *)a;
+    if (!path)
+      return -1;
+    char abs_path[256];
+    if (path[0] != '/') {
+      sched::Task *task = sched::get_current();
+      const char *cwd = (task && task->process && task->process->cwd) ? fs::vfs::get_path(task->process->cwd) : "/";
+      size_t cwd_len = strlen(cwd);
+      if (cwd_len > 0 && cwd[cwd_len - 1] == '/') {
+        ksnprintf(abs_path, sizeof(abs_path), "%s%s", cwd, path);
+      } else {
+        ksnprintf(abs_path, sizeof(abs_path), "%s/%s", cwd, path);
+      }
+      path = abs_path;
+    }
+    return fs::vfs::remove(path) ? 0 : -1;
+  }
+
+  case SYS_MKDIR: {
+    const char *path = (const char *)a;
+    if (!path)
+      return -1;
+    char abs_path[256];
+    if (path[0] != '/') {
+      sched::Task *task = sched::get_current();
+      const char *cwd = (task && task->process && task->process->cwd) ? fs::vfs::get_path(task->process->cwd) : "/";
+      size_t cwd_len = strlen(cwd);
+      if (cwd_len > 0 && cwd[cwd_len - 1] == '/') {
+        ksnprintf(abs_path, sizeof(abs_path), "%s%s", cwd, path);
+      } else {
+        ksnprintf(abs_path, sizeof(abs_path), "%s/%s", cwd, path);
+      }
+      path = abs_path;
+    }
+    return fs::vfs::create_dir_path(path) ? 0 : -1;
+  }
 
   default:
     kprintf("syscall: unknown syscall %lu\n", num);
