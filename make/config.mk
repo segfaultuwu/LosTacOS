@@ -5,6 +5,8 @@ CC  = $(CROSS)gcc
 LD  = $(CROSS)ld
 AR  = $(CROSS)ar
 
+BOOTLOADER ?= limine
+
 AS = nasm
 TAR = tar
 

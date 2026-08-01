@@ -1,10 +1,10 @@
 #include "LTOS/drivers/ahci.hpp"
-#include "LTOS/arch/x86_64/paging.hpp"
 #include "LTOS/drivers/pci.hpp"
 #include "LTOS/fs/devfs.hpp"
 #include "LTOS/lib/kprintf.h"
 #include "LTOS/logger.hpp"
 #include "LTOS/mm/heap.hpp"
+#include "LTOS/mm/paging.hpp"
 #include <string.h>
 
 namespace drivers::ahci {

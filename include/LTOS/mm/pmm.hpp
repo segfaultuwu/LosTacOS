@@ -26,6 +26,8 @@ uint64_t free_memory();
 uint64_t total_memory();
 uint64_t used_memory();
 
+void reserve_region(uint64_t addr, uint64_t length);
+
 void print_memory_map();
 
 } // namespace pmm

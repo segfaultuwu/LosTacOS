@@ -4,6 +4,7 @@
 #include "LTOS/drivers/serial.hpp"
 #include "LTOS/drivers/tty/ioctl.hpp"
 #include "LTOS/fs/devfs.hpp"
+#include "LTOS/lib/kprintf.h"
 
 #include <string.h>
 
@@ -12,10 +13,6 @@ extern char stdin_buffer[256];
 
 namespace tty {
 
-// Line-discipline state. There's only one physical console in LosTacOS, so
-// one global termios is all /dev/tty needs -- but it's real state now
-// (persisted across ioctl calls), not the zeroed/discarded stand-in that
-// used to live in the syscall layer.
 static struct termios tio = {
     .c_iflag = 0,
     .c_oflag = 0,
@@ -33,15 +30,13 @@ static void ensure_defaults() {
 
   termios_init = true;
 
-  tio.c_cc[VERASE] = '\b'; // matches what the keyboard driver emits
+  tio.c_cc[VERASE] = '\b';
   tio.c_cc[VEOF] = 0x04;
   tio.c_cc[VINTR] = 0x03;
   tio.c_cc[VMIN] = 1;
   tio.c_cc[VTIME] = 0;
 }
 
-// Pops one byte off the raw keyboard ring buffer. Caller must already know
-// stdin_len > 0.
 static char pop_raw_byte() {
   char c = stdin_buffer[0];
 
@@ -72,9 +67,6 @@ static size_t read_canonical(char *buf, size_t len) {
         n--;
         if (echo) {
           console::put(0x08);
-          drivers::serial::write('\b');
-          drivers::serial::write(' ');
-          drivers::serial::write('\b');
         }
       }
       continue;
@@ -84,7 +76,6 @@ static size_t read_canonical(char *buf, size_t len) {
 
     if (echo) {
       console::put(c);
-      drivers::serial::write(c);
     }
 
     if (c == '\n')
@@ -94,8 +85,6 @@ static size_t read_canonical(char *buf, size_t len) {
   return n;
 }
 
-// Raw mode: no line editing, no waiting for a newline. Returns as soon as
-// there's at least one byte (VMIN == 0 means "don't even block for that").
 static size_t read_raw(char *buf, size_t len) {
   if (len == 0)
     return 0;
@@ -115,11 +104,6 @@ static size_t read_raw(char *buf, size_t len) {
   return n;
 }
 
-// The single source of truth for reading from the terminal. Used both for
-// fd 0 (stdin) and for anyone who opens /dev/tty directly, so the two can
-// no longer drift out of sync like they used to. Honors ICANON/ECHO from
-// the current termios instead of always being hard-wired to line-buffered
-// echoing input.
 size_t read(char *buf, size_t len) {
   ensure_defaults();
 
@@ -129,13 +113,8 @@ size_t read(char *buf, size_t len) {
   return read_raw(buf, len);
 }
 
-// Likewise the single source of truth for writing to the terminal, used
-// both for fd 1/2 (stdout/stderr) and for /dev/tty writers.
 size_t write(const char *buf, size_t len) {
   console::write(buf, len);
-
-  for (size_t i = 0; i < len; i++)
-    drivers::serial::write(buf[i]);
 
   return len;
 }
@@ -151,8 +130,8 @@ int ioctl(unsigned long req, void *arg) {
   case TIOCGWINSZ: {
     auto *ws = (winsize *)arg;
 
-    ws->ws_row = 25;
-    ws->ws_col = 80;
+    ws->ws_row = (uint16_t)console::get_rows();
+    ws->ws_col = (uint16_t)console::get_cols();
     ws->ws_xpixel = 0;
     ws->ws_ypixel = 0;
 
@@ -164,8 +143,6 @@ int ioctl(unsigned long req, void *arg) {
     return 0;
   }
 
-  // No actual serial line to drain/flush, so *W (drain first) and *F
-  // (flush input first) collapse to a plain attribute set here.
   case TCSETS:
   case TCSETSW:
   case TCSETSF: {
@@ -188,15 +165,34 @@ static size_t dev_write(const char *buf, size_t len, size_t offset) {
   return write(buf, len);
 }
 
-static fs::vfs::DevOps tty_ops = {
+static fs::vfs::DevOps tty_ops = {.write = dev_write, .read = dev_read, .ioctl = ioctl};
 
-    .write = dev_write, .read = dev_read, .ioctl = ioctl
+static int active_vt = 1;
 
-};
+void switch_vt(int vt) {
+  if (vt < 1 || vt > 12)
+    return;
+  active_vt = vt;
+  console::write("\033[2J\033[H", 7);
+  char msg[64];
+  int len = ksnprintf(msg, sizeof(msg), "[Switched to /dev/tty%d]\n", vt);
+  if (len > 0) {
+    console::write(msg, len);
+  }
+}
+
+int get_active_vt() {
+  return active_vt;
+}
 
 void init() {
   ensure_defaults();
   fs::devfs::register_device("tty", &tty_ops);
+  fs::devfs::register_device("ptmx", &tty_ops);
+  fs::devfs::register_device("console", &tty_ops);
+  fs::devfs::register_device("stdin", &tty_ops);
+  fs::devfs::register_device("stdout", &tty_ops);
+  fs::devfs::register_device("stderr", &tty_ops);
 }
 
 } // namespace tty

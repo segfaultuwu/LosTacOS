@@ -1,6 +1,6 @@
 #include "LTOS/fs/tarfs.hpp"
-
 #include "LTOS/fs/vfs.hpp"
+#include "LTOS/lib/gzip.hpp"
 #include "LTOS/lib/kprintf.h"
 #include "LTOS/logger.hpp"
 #include "LTOS/mm/heap.hpp"
@@ -79,6 +79,16 @@ static void build_index() {
 }
 
 void mount(void *address, size_t size) {
+  if (::gzip::is_gzip(address, size)) {
+    logger::info("tarfs: detected GZIP compressed rootfs archive");
+    size_t out_size = 4 * 1024 * 1024; // 4MB buffer for uncompressed rootfs tar
+    void *uncompressed = heap::kmalloc(out_size);
+    if (uncompressed && ::gzip::decompress(address, size, uncompressed, &out_size)) {
+      address = uncompressed;
+      size = out_size;
+    }
+  }
+
   tar_start = (uint8_t *)address;
   tar_size = size;
 
@@ -127,11 +137,6 @@ void mount_vfs() {
     size_t size = octal_to_int(hdr->size, sizeof(hdr->size));
     size_t blocks = (size + 511) / 512;
 
-    // hdr->name (and hdr->prefix) aren't guaranteed to be NUL-terminated if
-    // they use the full field width, so copy them into a scratch buffer we
-    // control. ustar splits paths longer than 100 chars across `prefix` +
-    // `name`; join them back together when prefix is set. Sized generously
-    // (155 + 1 '/' + 100 + 1 NUL = 257) so the join below can never overflow.
     char path_buf[300];
 
     if (hdr->prefix[0] != '\0') {
@@ -160,7 +165,6 @@ void mount_vfs() {
       path[plen - 1] = '\0';
 
     if (hdr->typeflag == '2') {
-
       char link_buf[101];
 
       strncpy(link_buf, hdr->linkname, sizeof(hdr->linkname));
@@ -179,13 +183,10 @@ void mount_vfs() {
 
     bool is_dir = hdr->typeflag == '5';
 
-    // Skip the tar's own root entry ("." / "" once normalized/stripped).
     if (path[0] == '\0') {
       ptr += 512 + blocks * 512;
       continue;
     }
-
-    // kprintf("tarfs adding: '%s'\n", path);
 
     if (is_dir) {
       fs::vfs::create_dir_path(path);
@@ -199,8 +200,6 @@ void mount_vfs() {
         node->file->size = size;
         node->file->read = nullptr;
         node->file->write = nullptr;
-
-        // kprintf("tarfs: added %s (%lu bytes)\n", path, size);
       } else {
         logger::warn("tarfs: failed to add %s", path);
       }

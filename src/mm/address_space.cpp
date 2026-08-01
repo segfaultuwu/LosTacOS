@@ -35,6 +35,8 @@ AddressSpace *AddressSpace::create() {
 
 void AddressSpace::destroy() {
   if (table && table != (paging::PageTable *)paging::kernel_pml4) {
+    paging::destroy_user_pages(table->pml4);
+
     heap::kfree(table);
   }
 

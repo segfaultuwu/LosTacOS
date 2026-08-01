@@ -29,6 +29,8 @@ char *strdup(const char *s);
 
 int strncmp(const char *a, const char *b, size_t n);
 
+char *strstr(const char *haystack, const char *needle);
+
 int strsplt(char *str, char *argv[], int max_args);
 
 #ifdef __cplusplus

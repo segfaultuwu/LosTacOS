@@ -1,15 +1,10 @@
-kernel_mainFound module: font.psf | Start: 0x5a0000 | Size: 11041 bytes
-Found module: font.psf | Start: 0x5a0000 | Size: 11041 bytes
-Found module: rootfs.tar | Start: 0x5a3000 | Size: 880640 bytes
-Found module: rootfs.tar | Start: 0x5a3000 | Size: 880640 bytes
-[ 0.0 ] [32m[INFO][0m tarfs indexed 83 files
-Searching PSF...
-Loading PSF addr=5a0000 size=11041
-FONT MAGIC: 72 b5 4a 86
-Detected PSF2
-PSF2 hdr=32 glyphs=256 glyph_size=40 width=10 height=20
-FONT OK: 10x20 glyphs=256 size=40
-PSF LOADED
+kernel_mainFound module: font.psf.gz | Start: 0x5af000 | Size: 2022 bytes
+Found module: font.psf.gz | Start: 0x5af000 | Size: 2022 bytes
+Found module: rootfs.tar.gz | Start: 0x5b0000 | Size: 265623 bytes
+Found module: rootfs.tar.gz | Start: 0x5b0000 | Size: 265623 bytes
+[ 0.0 ] [32m[INFO][0m tarfs: detected GZIP compressed rootfs archive
+[ 0.0 ] [32m[INFO][0m tarfs indexed 1 files
+FB [Limine Multiboot2]: 1024x768 pitch=4096 bpp=32 addr=fd000000
 [ 0.0 ] [32m[INFO][0m PIT start
 [ 0.0 ] [32m[INFO][0m Identity mapping
 [ 0.0 ] [32m[INFO][0m Identity done
@@ -18,5 +13,14 @@ PSF LOADED
 [ 0.0 ] [32m[INFO][0m CR3 loaded
 [ 0.0 ] [32m[INFO][0m Paging enabled
 HEAP INIT addr=1000000 size=16777216
+CPU: Discovered 1 CPU core(s) [LAPIC: 0xfee00000 | IOAPIC: 0xfec00000]
+CPU: Discovered 1 CPU core(s) [LAPIC: 0xfee00000 | IOAPIC: 0xfec00000]
+  CPU 0: APIC ID 0 | QEMU Virtual CPU version 2.5+ (AuthenticAMD)
+  CPU 0: APIC ID 0 | QEMU Virtual CPU version 2.5+ (AuthenticAMD)
 FB backbuffer=1000020 size=3145728
-CONSOLE FONT=116020
+procfs init
+devfs initialized
+mount: /sys missing
+[ 0.0 ] [32m[INFO][0m PCI bus initialized
+[ 0.0 ] [33m[WARN][0m [AHCI] No AHCI controller found on PCI bus.
+

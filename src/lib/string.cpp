@@ -144,7 +144,27 @@ int strcmp(const char *a, const char *b) {
     b++;
   }
 
-  return (unsigned char)*a - (unsigned char)*b;
+  return *(unsigned char *)a - *(unsigned char *)b;
+}
+
+char *strstr(const char *haystack, const char *needle) {
+  if (!*needle)
+    return (char *)haystack;
+
+  for (; *haystack; haystack++) {
+    if (*haystack == *needle) {
+      const char *h = haystack;
+      const char *n = needle;
+      while (*h && *n && *h == *n) {
+        h++;
+        n++;
+      }
+      if (!*n)
+        return (char *)haystack;
+    }
+  }
+
+  return nullptr;
 }
 
 int strncmp(const char *a, const char *b, size_t n) {
@@ -198,24 +218,6 @@ char *strrchr(const char *s, int c) {
       last = s;
   } while (*s++);
   return (char *)last;
-}
-
-char *strstr(const char *haystack, const char *needle) {
-  if (!*needle)
-    return (char *)haystack;
-  for (const char *h = haystack; *h; h++) {
-    if (*h == *needle) {
-      const char *h_iter = h;
-      const char *n_iter = needle;
-      while (*h_iter && *n_iter && *h_iter == *n_iter) {
-        h_iter++;
-        n_iter++;
-      }
-      if (!*n_iter)
-        return (char *)h;
-    }
-  }
-  return nullptr;
 }
 
 char *strncat(char *dest, const char *src, size_t n) {

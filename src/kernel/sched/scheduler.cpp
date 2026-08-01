@@ -1,12 +1,11 @@
 #include "LTOS/sched/scheduler.hpp"
 #include "LTOS/arch/x86_64/gdt.hpp"
-#include "LTOS/arch/x86_64/paging.hpp"
 #include "LTOS/exec/elf.hpp"
 #include "LTOS/fs/vfs.hpp"
-#include "LTOS/lib/kprintf.h"
 #include "LTOS/logger.hpp"
 #include "LTOS/mm/address_space.hpp"
 #include "LTOS/mm/heap.hpp"
+#include "LTOS/mm/paging.hpp"
 #include "LTOS/sched/process.hpp"
 #include "LTOS/sched/task.hpp"
 
@@ -19,6 +18,20 @@ Task *head = nullptr;
 static Task *current_task = nullptr;
 
 static uint64_t pid_counter = 1;
+
+void reap() {
+  Task *t = head;
+
+  while (t) {
+    Task *next = t->next;
+
+    if (t->state == State::DEAD && t != current_task) {
+      remove_and_destroy(t);
+    }
+
+    t = next;
+  }
+}
 
 static void kernel_idle() {
   while (true) {
@@ -41,7 +54,7 @@ static void task_wrapper(void (*entry)()) {
 uint64_t create_user_stack(mm::AddressSpace *space) {
 
   uint64_t stack_top = 0x8000000000;
-  uint64_t stack_size = 0x10000; // 64KB
+  uint64_t stack_size = 0x40000; // 256KB
 
   void *top_page = nullptr;
 
@@ -151,7 +164,7 @@ Process *create_process(uint64_t entry) {
 
   proc->pid = pid_counter++;
 
-  proc->space = mm::AddressSpace::create(); // albo clone kernel space
+  proc->space = mm::AddressSpace::create();
 
   Task *task = create_task(proc, entry);
 
@@ -360,6 +373,7 @@ bool exec_current(const char *path, char **argv, char **envp) {
 }
 
 Registers *schedule(Registers *old) {
+  reap();
   if (current_task) {
     current_task->regs = old;
     if (current_task->state == State::RUNNING) {
@@ -369,6 +383,8 @@ Registers *schedule(Registers *old) {
 
   if (!head)
     return old;
+
+  reap();
 
   Task *next;
 
@@ -530,7 +546,11 @@ Process *clone(Process *parent) {
     }
   }
 
-  paging::clone_user_pages(child->space->table->pml4, parent->space->table->pml4);
+  if (!paging::clone_user_pages(child->space->table->pml4, parent->space->table->pml4)) {
+    child->space->destroy();
+    heap::kfree(child);
+    return nullptr;
+  }
 
   Task *task = (Task *)heap::kmalloc(sizeof(Task));
   if (!task) {

@@ -47,8 +47,6 @@ void register_device(const char *name, vfs::DevOps *ops) {
 
   if (!node)
     kprintf("devfs: failed creating /dev/%s\n", name);
-
-  kprintf("devfs: registered /dev/%s\n", name);
 }
 
 static Device *find_device(const char *name) {
@@ -59,6 +57,44 @@ static Device *find_device(const char *name) {
       return d;
 
     d = d->next;
+  }
+
+  // Dynamic /dev/tty* device creation
+  if (strncmp(name, "tty", 3) == 0 && name[3] >= '0' && name[3] <= '9') {
+    Device *dev = (Device *)heap::kmalloc(sizeof(Device));
+    if (dev) {
+      char *name_copy = (char *)heap::kmalloc(strlen(name) + 1);
+      strcpy(name_copy, name);
+      dev->name = name_copy;
+      Device *base_tty = find_device("tty");
+      dev->ops = base_tty ? base_tty->ops : nullptr;
+      dev->next = devices;
+      devices = dev;
+      if (dev->ops) {
+        vfs::create_dev(name_copy, dev->ops);
+      }
+      return dev;
+    }
+  }
+
+  // Dynamic per-monitor /dev/fb* device creation
+  if (strncmp(name, "fb", 2) == 0 && name[2] >= '0' && name[2] <= '9') {
+    Device *dev = (Device *)heap::kmalloc(sizeof(Device));
+    if (dev) {
+      char *name_copy = (char *)heap::kmalloc(strlen(name) + 1);
+      strcpy(name_copy, name);
+      dev->name = name_copy;
+      Device *base_fb = find_device("fb");
+      if (!base_fb)
+        base_fb = find_device("fb0");
+      dev->ops = base_fb ? base_fb->ops : nullptr;
+      dev->next = devices;
+      devices = dev;
+      if (dev->ops) {
+        vfs::create_dev(name_copy, dev->ops);
+      }
+      return dev;
+    }
   }
 
   return nullptr;

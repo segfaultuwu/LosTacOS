@@ -19,6 +19,8 @@ extern void free(void *ptr);
  * Program control
  */
 
+extern int atexit(void (*func)(void));
+
 extern void exit(int status);
 
 extern void abort(void);

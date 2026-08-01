@@ -13,6 +13,11 @@ enum Syscall {
   SYS_OPEN = 2,
   SYS_CLOSE = 3,
 
+  SYS_STAT = 4,
+  SYS_FSTAT = 5,
+  SYS_LSTAT = 6,
+  SYS_POLL = 7,
+
   SYS_LSEEK = 8,
 
   SYS_MMAP = 9,

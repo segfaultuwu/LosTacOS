@@ -2,7 +2,6 @@
 
 #include "LTOS/drivers/framebuffer.hpp"
 #include "LTOS/drivers/psf.hpp"
-#include "LTOS/drivers/serial.hpp"
 
 #include <stdint.h>
 #include <string.h>
@@ -43,6 +42,20 @@ void unlock() {}
 
 void clear();
 
+uint32_t get_rows() {
+  if (!font)
+    return 25;
+  uint32_t fh = font->height * scale;
+  return fh > 0 ? (screen_height / fh) : 25;
+}
+
+uint32_t get_cols() {
+  if (!font)
+    return 80;
+  uint32_t fw = font->width * scale;
+  return fw > 0 ? (screen_width / fw) : 80;
+}
+
 static void mark_dirty(uint32_t x, uint32_t y, uint32_t w, uint32_t h) {
   if (w == 0 || h == 0)
     return;
@@ -73,6 +86,9 @@ static void flush_dirty() {
 }
 
 static void clear_line(int mode) {
+  if (!font)
+    return;
+
   uint32_t start = 0;
   uint32_t end = screen_width;
 
@@ -88,13 +104,13 @@ static void clear_line(int mode) {
     end = screen_width;
   }
 
-  for (uint32_t y = 0; y < font->height; y++) {
+  for (uint32_t y = 0; y < font->height * scale; y++) {
     for (uint32_t x = start; x < end; x++) {
       framebuffer::put_pixel(x, cursor_y + y, bg);
     }
   }
 
-  mark_dirty(start, cursor_y, end - start, font->height);
+  mark_dirty(start, cursor_y, end - start, font->height * scale);
 }
 
 static void draw_cursor_block(bool on) {
@@ -135,11 +151,7 @@ void init() {
   cursor_visible = true;
   cursor_blink_counter = 0;
 
-  // Initial clear is genuinely full-screen — flush it once, directly,
-  // rather than routing through the dirty-rect machinery.
   framebuffer::swap();
-
-  drivers::serial::writef("CONSOLE FONT=%lx\n", (uint64_t)font);
 }
 
 void draw_char(char c) {
@@ -186,13 +198,17 @@ void scroll() {
   if (!fb)
     return;
 
-  uint32_t move = pitch * (screen_height - font->height);
+  uint32_t line_h = font->height * scale;
 
-  memmove(fb, fb + pitch * font->height, move);
+  if (screen_height <= line_h)
+    return;
 
-  memset(fb + move, 0, pitch * font->height);
+  uint32_t move = pitch * (screen_height - line_h);
 
-  // A scroll genuinely touches the entire visible area.
+  memmove(fb, fb + pitch * line_h, move);
+
+  memset(fb + move, 0, pitch * line_h);
+
   mark_dirty(0, 0, screen_width, screen_height);
 }
 
@@ -208,14 +224,12 @@ void newline() {
 }
 
 static void set_color(uint32_t new_fg, uint32_t new_bg) {
-
   fg = new_fg;
   bg = new_bg;
 }
 
 static void ansi_code(int code) {
   switch (code) {
-
   case 0:
     fg = 0xffffffff;
     bg = 0x00000000;
@@ -243,8 +257,7 @@ static void ansi_code(int code) {
     reverse = false;
     break;
 
-    // foreground
-
+  // foreground
   case 30:
     fg = 0xff000000;
     break;
@@ -270,8 +283,7 @@ static void ansi_code(int code) {
     fg = 0xffffffff;
     break;
 
-    // bright foreground
-
+  // bright foreground
   case 90:
     fg = 0xff555555;
     break;
@@ -297,8 +309,7 @@ static void ansi_code(int code) {
     fg = 0xffffffff;
     break;
 
-    // background
-
+  // background
   case 40:
     bg = 0xff000000;
     break;
@@ -352,109 +363,164 @@ static void ansi_code(int code) {
 }
 
 static void handle_ansi(const char *seq) {
+  if (!font)
+    return;
+
+  // Private mode sequences (e.g. \033[?25h, \033[?25l)
+  if (seq[0] == '[' && seq[1] == '?') {
+    int mode_val = 0;
+    size_t idx = 2;
+    while (seq[idx] >= '0' && seq[idx] <= '9') {
+      mode_val = mode_val * 10 + (seq[idx] - '0');
+      idx++;
+    }
+    if (mode_val == 25) {
+      if (seq[idx] == 'h') {
+        cursor_visible = true;
+      } else if (seq[idx] == 'l') {
+        if (cursor_visible) {
+          draw_cursor_block(false);
+          cursor_visible = false;
+        }
+      }
+    }
+    return;
+  }
+
   if (seq[0] != '[')
     return;
 
-  int nums[8];
+  int nums[8] = {0};
   int count = 0;
-
   int value = 0;
-  bool number = false;
+  bool has_num = false;
 
-  for (size_t i = 1; seq[i]; i++) {
-
+  size_t i = 1;
+  while (seq[i]) {
     char c = seq[i];
 
     if (c >= '0' && c <= '9') {
       value = value * 10 + (c - '0');
-      number = true;
-    }
-
-    else if (c == ';') {
-      if (number) {
-        if (count < 8)
-          nums[count++] = value;
-        value = 0;
-        number = false;
+      has_num = true;
+    } else if (c == ';') {
+      if (count < 8) {
+        nums[count++] = has_num ? value : 0;
       }
-    }
-
-    else if (c == 'K') {
-      if (number)
-        clear_line(value);
-      else
-        clear_line(0);
-
-      flush_dirty();
-      return;
-    }
-
-    else if (c == 'C') { // cursor forward
-      uint32_t n = number ? (uint32_t)value : 1;
-      uint32_t delta = n * font->width * scale;
-
-      uint32_t old_x = cursor_x;
-      cursor_x += delta;
-
-      if (cursor_x > screen_width)
-        cursor_x = screen_width;
-
-      uint32_t w =
-          (cursor_x >= old_x) ? (cursor_x - old_x + font->width * scale) : (font->width * scale);
-      mark_dirty(old_x, cursor_y, w, font->height * scale);
-      flush_dirty();
-      return;
-    }
-
-    else if (c == 'D') { // cursor back
-      uint32_t n = number ? (uint32_t)value : 1;
-      uint32_t delta = n * font->width * scale;
-
-      uint32_t old_x = cursor_x;
-      cursor_x = (delta > cursor_x) ? 0 : cursor_x - delta;
-
-      uint32_t w =
-          (old_x >= cursor_x) ? (old_x - cursor_x + font->width * scale) : (font->width * scale);
-      mark_dirty(cursor_x, cursor_y, w, font->height * scale);
-      flush_dirty();
-      return;
-    }
-
-    else if (c == 'm') {
-      if (number && count < 8)
+      value = 0;
+      has_num = false;
+    } else {
+      if (has_num && count < 8) {
         nums[count++] = value;
+      }
 
-      for (int j = 0; j < count; j++)
-        ansi_code(nums[j]);
+      uint32_t char_w = font->width * scale;
+      uint32_t char_h = font->height * scale;
+      uint32_t max_cols = (char_w > 0) ? (screen_width / char_w) : 80;
+      uint32_t max_rows = (char_h > 0) ? (screen_height / char_h) : 25;
 
+      switch (c) {
+      case 'H':
+      case 'f': {
+        int r = (count >= 1 && nums[0] > 0) ? nums[0] - 1 : 0;
+        int col = (count >= 2 && nums[1] > 0) ? nums[1] - 1 : 0;
+
+        if ((uint32_t)r >= max_rows)
+          r = (int)max_rows - 1;
+        if ((uint32_t)col >= max_cols)
+          col = (int)max_cols - 1;
+        if (r < 0)
+          r = 0;
+        if (col < 0)
+          col = 0;
+
+        mark_dirty(cursor_x, cursor_y, char_w, char_h);
+        cursor_y = r * char_h;
+        cursor_x = col * char_w;
+        mark_dirty(cursor_x, cursor_y, char_w, char_h);
+        flush_dirty();
+        return;
+      }
+
+      case 'A': {
+        int n = (count >= 1 && nums[0] > 0) ? nums[0] : 1;
+        uint32_t delta = n * char_h;
+        mark_dirty(cursor_x, cursor_y, char_w, char_h);
+        cursor_y = (delta > cursor_y) ? 0 : cursor_y - delta;
+        mark_dirty(cursor_x, cursor_y, char_w, char_h);
+        flush_dirty();
+        return;
+      }
+
+      case 'B': {
+        int n = (count >= 1 && nums[0] > 0) ? nums[0] : 1;
+        uint32_t delta = n * char_h;
+        mark_dirty(cursor_x, cursor_y, char_w, char_h);
+        cursor_y += delta;
+        if (cursor_y >= screen_height)
+          cursor_y = screen_height - char_h;
+        mark_dirty(cursor_x, cursor_y, char_w, char_h);
+        flush_dirty();
+        return;
+      }
+
+      case 'C': {
+        int n = (count >= 1 && nums[0] > 0) ? nums[0] : 1;
+        uint32_t delta = n * char_w;
+        mark_dirty(cursor_x, cursor_y, char_w, char_h);
+        cursor_x += delta;
+        if (cursor_x >= screen_width)
+          cursor_x = screen_width - char_w;
+        mark_dirty(cursor_x, cursor_y, char_w, char_h);
+        flush_dirty();
+        return;
+      }
+
+      case 'D': {
+        int n = (count >= 1 && nums[0] > 0) ? nums[0] : 1;
+        uint32_t delta = n * char_w;
+        mark_dirty(cursor_x, cursor_y, char_w, char_h);
+        cursor_x = (delta > cursor_x) ? 0 : cursor_x - delta;
+        mark_dirty(cursor_x, cursor_y, char_w, char_h);
+        flush_dirty();
+        return;
+      }
+
+      case 'K': {
+        int mode = (count >= 1) ? nums[0] : 0;
+        clear_line(mode);
+        flush_dirty();
+        return;
+      }
+
+      case 'J': {
+        int mode = (count >= 1) ? nums[0] : 0;
+        if (mode == 2) {
+          clear();
+        }
+        flush_dirty();
+        return;
+      }
+
+      case 'm': {
+        if (count == 0) {
+          ansi_code(0);
+        } else {
+          for (int j = 0; j < count; j++)
+            ansi_code(nums[j]);
+        }
+        return;
+      }
+      }
       return;
     }
-
-    else if (c == 'J') {
-      if (value == 2)
-        clear();
-
-      return;
-    }
-
-    else if (c == 'H') {
-      mark_dirty(cursor_x, cursor_y, font->width, font->height);
-      cursor_x = 0;
-      cursor_y = 0;
-      mark_dirty(cursor_x, cursor_y, font->width, font->height);
-      flush_dirty();
-      return;
-    }
+    i++;
   }
 }
 
 void put(char c) {
-
   if (!font)
     return;
 
-  // Erase any visible cursor block before drawing/editing anything,
-  // so the blink loop never leaves a stale block behind.
   if (cursor_visible) {
     draw_cursor_block(false);
     cursor_visible = false;
@@ -466,19 +532,16 @@ void put(char c) {
   static size_t ansi_pos = 0;
 
   if (c == '\033') {
-
     escape = true;
     ansi_pos = 0;
     return;
   }
 
   if (escape) {
-
     if (ansi_pos < sizeof(ansi) - 1)
       ansi[ansi_pos++] = c;
 
     if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || ansi_pos >= sizeof(ansi) - 1) {
-
       ansi[ansi_pos] = 0;
 
       handle_ansi(ansi);
@@ -492,7 +555,6 @@ void put(char c) {
   }
 
   if (c == '\n') {
-
     newline();
     flush_dirty();
     return;
@@ -554,23 +616,18 @@ void backspace() {
 
 void put_swap(char c) {
   lock();
-
   put(c);
-
   unlock();
 }
 
 void write(const char *buf, size_t len) {
   lock();
-
   for (size_t i = 0; i < len; i++)
     put(buf[i]);
-
   unlock();
 }
 
 void clear() {
-
   framebuffer::clear(bg);
 
   cursor_x = 0;
@@ -584,8 +641,6 @@ void set_font(psf::Font *f) {
   font = f;
 }
 
-// Call once per timer tick (e.g. from your PIT/APIC IRQ handler) to
-// drive the blinking cursor while the console is otherwise idle.
 void cursor_tick() {
   if (!font)
     return;

@@ -67,17 +67,19 @@ void reserve_below(uint64_t addr);
 
 // low level functions
 
+void destroy_user_pages(uint64_t *pml4);
+
 uint64_t *create_address_space();
 
 PageTable *clone_kernel_table();
 
 void switch_page_table(PageTable *table);
 
-void map_page(uint64_t *pml4, uint64_t va, uint64_t pa, uint64_t flags);
+bool map_page(uint64_t *pml4, uint64_t va, uint64_t pa, uint64_t flags);
 
 void unmap_page(uint64_t *pml4, uint64_t va);
 
-void clone_user_pages(uint64_t *dst_pml4, uint64_t *src_pml4);
+bool clone_user_pages(uint64_t *dst_pml4, uint64_t *src_pml4);
 
 void *alloc_page();
 

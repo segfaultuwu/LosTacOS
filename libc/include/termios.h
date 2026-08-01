@@ -27,9 +27,10 @@ struct termios {
 #define TCSETSW 0x5403
 #define TCSETSF 0x5404
 
-#ifndef TCSANOW
-#define TCSANOW TCSETS
-#endif
+/* tcsetattr actions */
+#define TCSANOW 0
+#define TCSADRAIN 1
+#define TCSAFLUSH 2
 
 /* input flags */
 #define IGNBRK 0000001
@@ -56,6 +57,14 @@ struct termios {
 #define ECHONL 0000100
 #define IEXTEN 0100000
 
+/* control flags */
+#define CSIZE 0000060
+#define CS5 0000000
+#define CS6 0000020
+#define CS7 0000040
+#define CS8 0000060
+#define PARENB 0000400
+
 /* control chars */
 #define VINTR 0
 #define VQUIT 1
@@ -65,12 +74,21 @@ struct termios {
 #define VTIME 5
 #define VMIN 6
 
-int tcgetattr(int fd, struct termios *term);
+#ifdef __cplusplus
+extern "C" {
+#endif
 
+int tcgetattr(int fd, struct termios *term);
 int tcsetattr(int fd, int optional_actions, const struct termios *term);
+
+void cfmakeraw(struct termios *term);
 
 speed_t cfgetispeed(const struct termios *term);
 speed_t cfgetospeed(const struct termios *term);
 
 int cfsetispeed(struct termios *term, speed_t speed);
 int cfsetospeed(struct termios *term, speed_t speed);
+
+#ifdef __cplusplus
+}
+#endif

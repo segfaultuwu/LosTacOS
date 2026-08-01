@@ -75,6 +75,7 @@ static int fb_ioctl(unsigned long req, void *arg) {
 static vfs::DevOps fb_ops = {.write = fb_write, .read = fb_read, .ioctl = fb_ioctl};
 
 void init_fb() {
+  register_device("fb", &fb_ops);
   register_device("fb0", &fb_ops);
 }
 

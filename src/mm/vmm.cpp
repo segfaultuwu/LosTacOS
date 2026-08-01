@@ -1,6 +1,6 @@
 #include "LTOS/mm/vmm.hpp"
-#include "LTOS/arch/x86_64/paging.hpp"
 #include "LTOS/mm/heap.hpp"
+#include "LTOS/mm/paging.hpp"
 #include "LTOS/mm/pmm.hpp"
 
 namespace vmm {

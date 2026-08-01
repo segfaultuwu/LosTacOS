@@ -14,6 +14,18 @@ struct Info {
 
 extern Info info;
 
+namespace grub {
+bool init(uint64_t addr, Info *info);
+bool available();
+} // namespace grub
+
+namespace limine {
+bool init(uint64_t addr, Info *info);
+bool available();
+} // namespace limine
+
+char *get_bootloader();
+
 void init(uint64_t addr);
 void init_backbuffer();
 

@@ -1,8 +1,8 @@
-#include "LTOS/arch/x86_64/paging.hpp"
 #include "LTOS/drivers/framebuffer.hpp"
 #include "LTOS/drivers/serial.hpp"
 #include "LTOS/fs/tarfs.hpp"
 #include "LTOS/lib/kprintf.h"
+#include "LTOS/mm/paging.hpp"
 #include <multiboot.h>
 #include <stdint.h>
 #include <string.h>
@@ -10,6 +10,9 @@
 namespace multiboot2 {
 
 char boot_cmdline[256] = "BOOT_IMAGE=/boot/kernel.elf quiet";
+
+static uint32_t rootfs_start = 0;
+static uint32_t rootfs_size = 0;
 
 void parse_info(uint64_t mbi_phys_addr) {
   for_each_tag(mbi_phys_addr, [](struct multiboot_tag *tag) {
@@ -31,8 +34,9 @@ void parse_info(uint64_t mbi_phys_addr) {
                               size);
 
       paging::reserve_below(end);
-      if (strcmp(mod->cmdline, "rootfs.tar") == 0) {
-        fs::tarfs::mount((void *)mod->mod_start, mod->mod_end - mod->mod_start);
+      if (mod->cmdline && strstr(mod->cmdline, "rootfs.tar")) {
+        rootfs_start = mod->mod_start;
+        rootfs_size = size;
       }
       break;
     }
@@ -42,6 +46,12 @@ void parse_info(uint64_t mbi_phys_addr) {
     }
     }
   });
+}
+
+void mount_rootfs() {
+  if (rootfs_start && rootfs_size) {
+    fs::tarfs::mount((void *)(uintptr_t)rootfs_start, rootfs_size);
+  }
 }
 
 int list_modules(uint64_t mbi_phys_addr, struct multiboot_module *out, int max_count) {

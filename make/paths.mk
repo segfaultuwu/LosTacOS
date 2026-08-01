@@ -5,7 +5,7 @@ KERNEL = $(BUILD)/kernel.elf
 ISO = $(BUILD)/LosTacOS-x86_64.iso
 
 ROOTFS = $(BUILD)/rootfs
-TARFS = $(BUILD)/rootfs.tar
+TARFS = $(BUILD)/rootfs.tar.gz
 
 ROOTDIR = root
 

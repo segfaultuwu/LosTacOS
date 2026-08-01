@@ -2,6 +2,7 @@
 
 #include "LTOS/drivers/psf.hpp"
 #include <stddef.h>
+#include <stdint.h>
 
 namespace console {
 
@@ -21,6 +22,9 @@ void backspace();
 void clear();
 
 void cursor_tick();
+
+uint32_t get_rows();
+uint32_t get_cols();
 
 void lock();
 void unlock();

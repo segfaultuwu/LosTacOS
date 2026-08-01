@@ -1,7 +1,7 @@
 #include "LTOS/arch/x86_64/cpu.hpp"
 #include "LTOS/arch/x86_64/gdt.hpp"
 #include "LTOS/arch/x86_64/idt.hpp"
-#include "LTOS/arch/x86_64/paging.hpp"
+#include "LTOS/mm/paging.hpp"
 
 #include "LTOS/drivers/ahci.hpp"
 #include "LTOS/drivers/console.hpp"
@@ -34,6 +34,10 @@
 #include <cstddef>
 #include <stdint.h>
 
+namespace multiboot2 {
+void mount_rootfs();
+}
+
 bool state::vfs_initialized = false;
 
 extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
@@ -52,8 +56,6 @@ extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
   //
 
   multiboot2::parse_info(mbi_addr);
-
-  psf::find_font(mbi_addr);
 
   //
   // CPU
@@ -82,6 +84,12 @@ extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
   //
 
   heap::init();
+
+  //
+  // Load GZIP compressed font & rootfs after Heap is ready
+  //
+  psf::find_font(mbi_addr);
+  multiboot2::mount_rootfs();
 
   arch::cpu::init(mbi_addr);
 

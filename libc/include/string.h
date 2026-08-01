@@ -31,6 +31,10 @@ extern int strcmp(const char *a, const char *b);
 
 extern int strncmp(const char *a, const char *b, size_t n);
 
+extern int strcasecmp(const char *s1, const char *s2);
+
+extern int strncasecmp(const char *s1, const char *s2, size_t n);
+
 extern char *strchr(const char *s, int c);
 
 extern char *strrchr(const char *s, int c);

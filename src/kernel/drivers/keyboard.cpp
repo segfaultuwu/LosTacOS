@@ -2,9 +2,11 @@
 #include "LTOS/drivers/console.hpp"
 #include "LTOS/drivers/serial.hpp"
 #include "LTOS/drivers/timer.hpp"
+#include "LTOS/drivers/tty.hpp"
 #include "LTOS/lib/kprintf.h"
 #include <stdint.h>
 
+// Restored to global scope so tty.cpp can link to them
 char stdin_buffer[256];
 volatile size_t stdin_len = 0;
 
@@ -14,24 +16,24 @@ constexpr uint16_t KBD_DATA = 0x60;
 constexpr uint16_t KBD_STATUS = 0x64;
 
 constexpr uint8_t STATUS_OUTPUT_FULL = 0x01;
+constexpr uint8_t STATUS_INPUT_FULL = 0x02;
+
+constexpr size_t QUEUE_SIZE = 128;
+
+static KeyEvent queue[QUEUE_SIZE];
+static volatile uint32_t queue_read = 0;
+static volatile uint32_t queue_write = 0;
 
 static bool shift = false;
 static bool caps = false;
 static bool ctrl = false;
 static bool alt = false;
+static bool num_lock = false;
+static bool scroll_lock = false;
 
-constexpr size_t QUEUE_SIZE = 128;
-
-static KeyEvent queue[QUEUE_SIZE];
-
-static volatile uint32_t queue_read = 0;
-static volatile uint32_t queue_write = 0;
-
-// Set 1 scancodes for keys that arrive as a plain byte (no 0xE0 lead byte).
+// Set 1 scancodes for keys that arrive as a plain byte
 static KeyCode scancode_to_key(uint8_t sc) {
-
   switch (sc) {
-
   case 0x1C:
     return KEY_ENTER;
   case 0x01:
@@ -55,6 +57,10 @@ static KeyCode scancode_to_key(uint8_t sc) {
 
   case 0x3A:
     return KEY_CAPS_LOCK;
+  case 0x45:
+    return KEY_NUM_LOCK;
+  case 0x46:
+    return KEY_SCROLL_LOCK;
 
   case 0x1E:
     return KEY_A;
@@ -178,16 +184,6 @@ static KeyCode scancode_to_key(uint8_t sc) {
   case 0x58:
     return KEY_F12;
 
-  case 0x45:
-    return KEY_NUM_LOCK;
-  case 0x46:
-    return KEY_SCROLL_LOCK;
-
-  // Base (non-extended) numpad matrix. These scancodes are shared with
-  // Insert/Delete/Home/End/PageUp/PageDown/arrows -- the *extended*
-  // (0xE0-prefixed) versions of those same byte values mean the
-  // navigation key instead, handled separately in
-  // extended_scancode_to_key() below.
   case 0x37:
     return KEY_KP_MULTIPLY;
   case 0x4A:
@@ -222,21 +218,17 @@ static KeyCode scancode_to_key(uint8_t sc) {
   }
 }
 
-// Set 1 scancodes that arrive prefixed with a lead byte of 0xE0.
+// Set 1 scancodes that arrive prefixed with a lead byte of 0xE0
 static KeyCode extended_scancode_to_key(uint8_t sc) {
-
   switch (sc) {
-
   case 0x1C:
     return KEY_KP_ENTER;
   case 0x35:
     return KEY_KP_DIVIDE;
-
   case 0x1D:
     return KEY_RIGHT_CTRL;
   case 0x38:
     return KEY_RIGHT_ALT;
-
   case 0x48:
     return KEY_ARROW_UP;
   case 0x50:
@@ -245,7 +237,6 @@ static KeyCode extended_scancode_to_key(uint8_t sc) {
     return KEY_ARROW_LEFT;
   case 0x4D:
     return KEY_ARROW_RIGHT;
-
   case 0x52:
     return KEY_INSERT;
   case 0x53:
@@ -258,63 +249,55 @@ static KeyCode extended_scancode_to_key(uint8_t sc) {
     return KEY_PAGE_UP;
   case 0x51:
     return KEY_PAGE_DOWN;
-
   default:
-    // Print Screen and Pause use their own multi-byte, non-uniform
-    // sequences (Print Screen: E0 2A E0 37 on press; Pause: E1 1D 45 E1
-    // 9D C5, no distinct release code at all). Neither is handled here --
-    // not needed for shell use, and Pause in particular doesn't fit this
-    // press/release model at all.
     return KEY_NONE;
   }
 }
 
+static char apply_ctrl(char c) {
+  if (!ctrl)
+    return c;
+  if (c >= 'a' && c <= 'z')
+    return c - 'a' + 1;
+  if (c >= 'A' && c <= 'Z')
+    return c - 'A' + 1;
+  if (c == '@')
+    return 0;
+  if (c >= '[' && c <= '_')
+    return c - '@';
+  return c;
+}
+
 char key_to_ascii(KeyCode key) {
-
   if (key >= KEY_A && key <= KEY_Z) {
-
     char c = 'a' + (key - KEY_A);
-
     if (shift ^ caps)
       c -= 32;
-
     return c;
   }
 
   if (key >= KEY_1 && key <= KEY_9) {
-
     static const char nums[] = "123456789";
     static const char shifted[] = "!@#$%^&*(";
-
-    char c = nums[key - KEY_1];
-
-    if (shift)
-      c = shifted[key - KEY_1];
-
-    return c;
+    return shift ? shifted[key - KEY_1] : nums[key - KEY_1];
   }
 
   if (key == KEY_0)
     return shift ? ')' : '0';
 
   switch (key) {
-
+  case KEY_ESCAPE:
+    return '\033';
   case KEY_SPACE:
     return ' ';
-
   case KEY_ENTER:
   case KEY_KP_ENTER:
     return '\n';
-
   case KEY_BACKSPACE:
     return '\b';
-
   case KEY_TAB:
     return '\t';
 
-  // Symbols. Shift-combos here are what actually let the shell's
-  // pipe/redirect syntax get typed at all: shift+backslash for '|',
-  // shift+comma for '<', shift+dot for '>'.
   case KEY_MINUS:
     return shift ? '_' : '-';
   case KEY_EQUAL:
@@ -338,31 +321,28 @@ char key_to_ascii(KeyCode key) {
   case KEY_SLASH:
     return shift ? '?' : '/';
 
-  // Numpad, treated as always-numeric (no Num Lock state tracking yet --
-  // the arrow/nav dual-meaning of these physical keys is handled entirely
-  // in extended_scancode_to_key() via the 0xE0 prefix instead).
   case KEY_KP_0:
-    return '0';
+    return num_lock ? '0' : 0;
   case KEY_KP_1:
-    return '1';
+    return num_lock ? '1' : 0;
   case KEY_KP_2:
-    return '2';
+    return num_lock ? '2' : 0;
   case KEY_KP_3:
-    return '3';
+    return num_lock ? '3' : 0;
   case KEY_KP_4:
-    return '4';
+    return num_lock ? '4' : 0;
   case KEY_KP_5:
-    return '5';
+    return num_lock ? '5' : 0;
   case KEY_KP_6:
-    return '6';
+    return num_lock ? '6' : 0;
   case KEY_KP_7:
-    return '7';
+    return num_lock ? '7' : 0;
   case KEY_KP_8:
-    return '8';
+    return num_lock ? '8' : 0;
   case KEY_KP_9:
-    return '9';
+    return num_lock ? '9' : 0;
   case KEY_KP_DOT:
-    return '.';
+    return num_lock ? '.' : 0;
   case KEY_KP_PLUS:
     return '+';
   case KEY_KP_MINUS:
@@ -378,18 +358,16 @@ char key_to_ascii(KeyCode key) {
 }
 
 KeyEvent get_event() {
-  while (queue_empty())
-    ;
-
+  while (queue_empty()) {
+    asm volatile("hlt");
+  }
   return pop();
 }
 
 static void push_event(KeyEvent e) {
   uint32_t next = (queue_write + 1) % QUEUE_SIZE;
-
   if (next == queue_read)
     return; // full
-
   queue[queue_write] = e;
   queue_write = next;
 }
@@ -401,62 +379,65 @@ bool queue_empty() {
 KeyEvent pop() {
   if (queue_empty())
     return {.key = KEY_NONE, .pressed = false};
-
   KeyEvent e = queue[queue_read];
-
   queue_read = (queue_read + 1) % QUEUE_SIZE;
-
   return e;
 }
 
 char getchar() {
-
   while (true) {
-
     auto e = get_event();
-
     if (!e.pressed)
       continue;
-
     char c = key_to_ascii(e.key);
-
+    c = apply_ctrl(c);
     if (!c)
       continue;
-
     return c;
   }
 }
 
 char *getstring() {
-
   static char buffer[256];
-
   size_t index = 0;
 
   while (index < 255) {
-
     char c = getchar();
-
     if (c == '\n') {
-
       buffer[index] = 0;
       break;
     }
-
     if (c == '\b') {
-
       if (index)
         index--;
-
       continue;
     }
-
     buffer[index++] = c;
   }
-
   buffer[index] = 0;
-
   return buffer;
+}
+
+// Hardware LED updating
+static void kbd_wait_write() {
+  while (drivers::serial::inb(KBD_STATUS) & STATUS_INPUT_FULL) {
+    asm volatile("pause");
+  }
+}
+
+static void update_leds() {
+  uint8_t leds = 0;
+  if (scroll_lock)
+    leds |= (1 << 0);
+  if (num_lock)
+    leds |= (1 << 1);
+  if (caps)
+    leds |= (1 << 2);
+
+  kbd_wait_write();
+  drivers::serial::outb(KBD_DATA, 0xED); // LED command
+  kbd_wait_write();
+  drivers::serial::outb(KBD_DATA, leds); // Send state
 }
 
 static uint8_t last_raw_scancode = 0;
@@ -464,6 +445,8 @@ static uint64_t last_scancode_tick = 0;
 
 static void process_scancode(uint8_t sc) {
   uint64_t now = timer::ticks();
+
+  // Basic debounce logic
   if (sc == last_raw_scancode && (now - last_scancode_tick < 15)) {
     return;
   }
@@ -475,50 +458,68 @@ static void process_scancode(uint8_t sc) {
     extended = true;
     return;
   }
-
-  if (sc == 0xE1) {
-    return;
-  }
+  if (sc == 0xE1)
+    return; // Pause/Break ignored
 
   bool is_extended = extended;
   extended = false;
-
   bool released = sc & 0x80;
-  sc &= 0x7f;
+  sc &= 0x7F;
 
   KeyCode key = is_extended ? extended_scancode_to_key(sc) : scancode_to_key(sc);
 
   if (released) {
     if (key == KEY_LEFT_SHIFT || key == KEY_RIGHT_SHIFT)
       shift = false;
-
     if (key == KEY_LEFT_CTRL || key == KEY_RIGHT_CTRL)
       ctrl = false;
-
     if (key == KEY_LEFT_ALT || key == KEY_RIGHT_ALT)
       alt = false;
 
     push_event(
         {.key = key, .pressed = false, .shift = shift, .ctrl = ctrl, .alt = alt, .scancode = sc});
-
     return;
   }
 
   if (key == KEY_LEFT_SHIFT || key == KEY_RIGHT_SHIFT)
     shift = true;
-
   if (key == KEY_LEFT_CTRL || key == KEY_RIGHT_CTRL)
     ctrl = true;
-
   if (key == KEY_LEFT_ALT || key == KEY_RIGHT_ALT)
     alt = true;
 
-  if (key == KEY_CAPS_LOCK)
+  bool update_led_hw = false;
+  if (key == KEY_CAPS_LOCK) {
     caps = !caps;
+    update_led_hw = true;
+  }
+  if (key == KEY_NUM_LOCK) {
+    num_lock = !num_lock;
+    update_led_hw = true;
+  }
+  if (key == KEY_SCROLL_LOCK) {
+    scroll_lock = !scroll_lock;
+    update_led_hw = true;
+  }
+
+  if (update_led_hw)
+    update_leds();
+
+  if (alt && key >= KEY_F1 && key <= KEY_F12) {
+    int vt_num = (key - KEY_F1) + 1;
+    tty::switch_vt(vt_num);
+    return;
+  }
 
   char keychar = key_to_ascii(key);
 
   if (keychar != 0) {
+    keychar = apply_ctrl(keychar);
+
+    // Write to global stdin_buffer for tty.cpp compatibility
+    if (alt && stdin_len < sizeof(stdin_buffer)) {
+      stdin_buffer[stdin_len++] = '\033'; // Escape prefix for Alt combos
+    }
     if (stdin_len < sizeof(stdin_buffer)) {
       stdin_buffer[stdin_len++] = keychar;
     }

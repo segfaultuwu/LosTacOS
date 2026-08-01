@@ -1,7 +1,7 @@
 #include "LTOS/arch/x86_64/cpu.hpp"
-#include "LTOS/arch/x86_64/paging.hpp"
 #include "LTOS/drivers/serial.hpp"
 #include "LTOS/lib/kprintf.h"
+#include "LTOS/mm/paging.hpp"
 #include <multiboot.h>
 #include <string.h>
 

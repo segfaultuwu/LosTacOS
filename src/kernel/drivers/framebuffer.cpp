@@ -1,8 +1,6 @@
 #include "LTOS/drivers/framebuffer.hpp"
-#include "LTOS/drivers/console.hpp"
 #include "LTOS/drivers/serial.hpp"
 #include "LTOS/mm/heap.hpp"
-#include "multiboot.h"
 #include <stdint.h>
 #include <string.h>
 
@@ -15,20 +13,42 @@ static uint32_t fb_size;
 static bool swapping = false;
 
 Info info{};
+char bootloader[16];
 
 void init(uint64_t addr) {
-  auto *fb = reinterpret_cast<multiboot_tag_framebuffer_common *>(addr);
+  // Autodetect Limine vs GRUB framebuffer initialization
+  bool ok = false;
 
-  info.address = reinterpret_cast<uint8_t *>(static_cast<uintptr_t>(fb->framebuffer_addr));
+  if (limine::available()) {
+    ok = limine::init(addr, &info);
 
-  info.width = fb->framebuffer_width;
-  info.height = fb->framebuffer_height;
-  info.pitch = fb->framebuffer_pitch;
-  info.bpp = fb->framebuffer_bpp;
+    if (ok) {
+      strcpy(bootloader, "limine\n");
+    }
+  } else if (grub::available()) {
+    ok = grub::init(addr, &info);
+
+    if (ok) {
+      strcpy(bootloader, "grub\n");
+    }
+  }
+
+  if (!ok) {
+    strcpy(bootloader, "unknown\n");
+  }
+
+  if (!ok) {
+    drivers::serial::write("FB: failed to initialize framebuffer from both Limine and GRUB\n");
+    return;
+  }
 
   frontbuffer = info.address;
-
   fb_size = info.pitch * info.height;
+}
+
+// Yes.
+char *get_bootloader() {
+  return bootloader;
 }
 
 void init_backbuffer() {

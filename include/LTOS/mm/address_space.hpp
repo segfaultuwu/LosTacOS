@@ -1,6 +1,6 @@
 #pragma once
 
-#include "LTOS/arch/x86_64/paging.hpp"
+#include "LTOS/mm/paging.hpp"
 
 namespace mm {
 

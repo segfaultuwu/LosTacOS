@@ -36,7 +36,7 @@ static inline bool test_bit(size_t bit) {
   return bitmap[bit / 8] & (1 << (bit % 8));
 }
 
-static void reserve_region(uint64_t addr, uint64_t length) {
+void reserve_region(uint64_t addr, uint64_t length) {
   uint64_t start = addr / PAGE_SIZE;
   uint64_t end = (addr + length + PAGE_SIZE - 1) / PAGE_SIZE;
 
@@ -112,15 +112,30 @@ void init(uint64_t multiboot_addr) {
 }
 
 uintptr_t alloc_page() {
-  uint64_t i;
-  for (i = last_page; i < TOTAL_PAGES; i++) {
-
+  // last_page previously never advanced, so every single call rescanned
+  // the bitmap from page 0 -- O(n) per allocation, getting slower as
+  // more of low memory fills up. It's now a rolling cursor: allocation
+  // resumes where the last one left off, and free_page() below rewinds
+  // it whenever a page is freed behind the cursor, so newly-freed pages
+  // (e.g. from reap()/destroy_user_pages() after a process exits) are
+  // found and reused immediately instead of the scan running past them
+  // every time.
+  for (uint64_t i = last_page; i < TOTAL_PAGES; i++) {
     if (!test_bit(i)) {
-
       set_bit(i);
-
       free_pages_count--;
+      last_page = i + 1;
+      return i * PAGE_SIZE;
+    }
+  }
 
+  // Wrap around: the tail of the bitmap is full, but pages may have been
+  // freed earlier than the cursor since it last passed through there.
+  for (uint64_t i = 0; i < last_page; i++) {
+    if (!test_bit(i)) {
+      set_bit(i);
+      free_pages_count--;
+      last_page = i + 1;
       return i * PAGE_SIZE;
     }
   }
@@ -135,6 +150,17 @@ void free_page(uintptr_t addr) {
   if (test_bit(page)) {
     clear_bit(page);
     free_pages_count++;
+
+    // Bias reuse toward the lowest freed page. This is what actually
+    // makes freed memory reclaimable in practice: without it, alloc_page
+    // only revisits low pages once its cursor wraps all the way around
+    // TOTAL_PAGES, which for a 128GB bitmap may never happen before
+    // running out of high memory first. It also happens to help
+    // paging::alloc_page(), which can only use pages below the
+    // identity-mapped 256MB line -- rewinding the cursor keeps
+    // allocations concentrated low, where they're actually usable.
+    if (page < last_page)
+      last_page = page;
   }
 }
 

@@ -1,11 +1,12 @@
 #include "LTOS/fs/procfs.hpp"
 #include "LTOS/arch/x86_64/cpu.hpp"
-#include "LTOS/arch/x86_64/paging.hpp"
+#include "LTOS/drivers/framebuffer.hpp"
 #include "LTOS/drivers/timer.hpp"
 #include "LTOS/fs/fs.hpp"
 #include "LTOS/fs/vfs.hpp"
 #include "LTOS/lib/kprintf.h"
 #include "LTOS/mm/heap.hpp"
+#include "LTOS/mm/paging.hpp"
 #include "LTOS/mm/pmm.hpp"
 #include "LTOS/sched/process.hpp"
 #include "LTOS/sched/scheduler.hpp"
@@ -61,6 +62,11 @@ static uint64_t count_user_pages(mm::AddressSpace *space) {
   }
 
   return pages;
+}
+
+static const char *get_bootloader() {
+  ksnprintf(buffer, sizeof(buffer), framebuffer::get_bootloader());
+  return buffer;
 }
 
 static const char *get_version() {
@@ -256,12 +262,21 @@ static const char *get_swaps() {
   return "Filename\t\t\t\tType\t\tSize\tUsed\tPriority\n";
 }
 
-static ProcEntry entries[] = {
-    {"version", get_version},       {"uptime", get_uptime},   {"meminfo", get_meminfo},
-    {"cpuinfo", get_cpuinfo},       {"cmdline", get_cmdline}, {"stat", get_stat},
-    {"mounts", get_mounts},         {"devices", get_devices}, {"filesystems", get_filesystems},
-    {"interrupts", get_interrupts}, {"loadavg", get_loadavg}, {"swaps", get_swaps},
-    {"diskstats", get_diskstats},   {nullptr, nullptr}};
+static ProcEntry entries[] = {{"version", get_version},
+                              {"uptime", get_uptime},
+                              {"meminfo", get_meminfo},
+                              {"cpuinfo", get_cpuinfo},
+                              {"cmdline", get_cmdline},
+                              {"stat", get_stat},
+                              {"mounts", get_mounts},
+                              {"devices", get_devices},
+                              {"filesystems", get_filesystems},
+                              {"interrupts", get_interrupts},
+                              {"loadavg", get_loadavg},
+                              {"swaps", get_swaps},
+                              {"diskstats", get_diskstats},
+                              {"bootloader", get_bootloader},
+                              {nullptr, nullptr}};
 
 static ProcFile *make_proc_file(const char *content) {
   if (!content)

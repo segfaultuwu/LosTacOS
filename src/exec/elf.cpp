@@ -1,8 +1,8 @@
 #include "LTOS/exec/elf.hpp"
-#include "LTOS/arch/x86_64/paging.hpp"
 #include "LTOS/fs/vfs.hpp"
 #include "LTOS/logger.hpp"
 #include "LTOS/mm/heap.hpp"
+#include "LTOS/mm/paging.hpp"
 
 #include <stdint.h>
 #include <string.h>

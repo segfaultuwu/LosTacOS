@@ -1,5 +1,4 @@
 #include "LTOS/syscall.hpp"
-#include "LTOS/arch/x86_64/paging.hpp"
 #include "LTOS/drivers/console.hpp"
 #include "LTOS/drivers/framebuffer.hpp"
 #include "LTOS/drivers/serial.hpp"
@@ -10,6 +9,7 @@
 #include "LTOS/fs/vfs.hpp"
 #include "LTOS/lib/kprintf.h"
 #include "LTOS/mm/heap.hpp"
+#include "LTOS/mm/paging.hpp"
 #include "LTOS/sched/process.hpp"
 #include "LTOS/sched/scheduler.hpp"
 #include "LTOS/sched/task.hpp"
@@ -822,6 +822,112 @@ static uint64_t sys_ioctl(uint64_t a, uint64_t b, uint64_t c) {
   return tty::ioctl(req, arg);
 }
 
+extern volatile size_t stdin_len;
+
+struct pollfd_kernel {
+  int fd;
+  short events;
+  short revents;
+};
+
+#ifndef POLLIN
+#define POLLIN 0x0001
+#define POLLOUT 0x0004
+#define POLLERR 0x0008
+#define POLLHUP 0x0010
+#define POLLNVAL 0x0020
+#endif
+
+static uint64_t sys_poll(uint64_t a, uint64_t b, uint64_t c) {
+  auto *pfds = (pollfd_kernel *)a;
+  size_t nfds = b;
+  int timeout_ms = (int)c;
+
+  if (!pfds || nfds == 0)
+    return 0;
+
+  uint64_t start_ms = timer::ticks();
+
+  while (true) {
+    int ready = 0;
+
+    for (size_t i = 0; i < nfds; i++) {
+      pfds[i].revents = 0;
+      int fd = pfds[i].fd;
+
+      if (fd == 0 || fd == 1 || fd == 2) {
+        if (fd == 0) {
+          if (pfds[i].events & POLLIN) {
+            if (stdin_len > 0) {
+              pfds[i].revents |= POLLIN;
+              ready++;
+            }
+          }
+        }
+        if (fd == 1 || fd == 2) {
+          if (pfds[i].events & POLLOUT) {
+            pfds[i].revents |= POLLOUT;
+            ready++;
+          }
+        }
+        continue;
+      }
+
+      FdEntry *entry = get_fd_entry(fd);
+      if (!entry || entry->type == FD_NONE) {
+        pfds[i].revents |= POLLNVAL;
+        ready++;
+        continue;
+      }
+
+      if (entry->type == FD_PIPE) {
+        Pipe *p = entry->pipe;
+        if (entry->readable) {
+          if (p->read_pos < p->write_pos) {
+            if (pfds[i].events & POLLIN) {
+              pfds[i].revents |= POLLIN;
+              ready++;
+            }
+          } else if (p->writers <= 0) {
+            pfds[i].revents |= POLLHUP;
+            ready++;
+          }
+        }
+        if (entry->writable) {
+          if (p->write_pos < sizeof(p->buffer)) {
+            if (pfds[i].events & POLLOUT) {
+              pfds[i].revents |= POLLOUT;
+              ready++;
+            }
+          }
+        }
+        continue;
+      }
+
+      if (pfds[i].events & POLLIN)
+        pfds[i].revents |= POLLIN;
+      if (pfds[i].events & POLLOUT)
+        pfds[i].revents |= POLLOUT;
+      ready++;
+    }
+
+    if (ready > 0)
+      return ready;
+
+    if (timeout_ms == 0)
+      return 0;
+
+    if (timeout_ms > 0) {
+      uint64_t elapsed = timer::ticks() - start_ms;
+      if (elapsed >= (uint64_t)timeout_ms) {
+        return 0;
+      }
+    }
+
+    timer::sleep(1);
+  }
+}
+
 static uint64_t sys_gettimeofday(uint64_t a) {
   auto *tv = (timeval *)a;
 
@@ -841,6 +947,9 @@ extern "C" uint64_t syscall_handler(uint64_t num, uint64_t a, uint64_t b, uint64
   // kprintf("SYSCALL %lu a=%lx b=%lx c=%lx\n", num, a, b, c);
 
   switch (num) {
+
+  case SYS_POLL:
+    return sys_poll(a, b, c);
 
   case SYS_WRITE:
     return sys_write(a, b, c);

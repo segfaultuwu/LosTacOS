@@ -3,6 +3,8 @@ BITS 32
 GLOBAL _start
 EXTERN kernel_main
 
+GLOBAL mb_magic
+GLOBAL mb_info
 
 SECTION .multiboot
 align 8
