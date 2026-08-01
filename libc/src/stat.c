@@ -1,4 +1,5 @@
 #include <sys/stat.h>
+#include <sys/syscall.h>
 
 int stat(const char *path, struct stat *buf) {
   if (!buf)
@@ -26,5 +27,8 @@ int chmod(const char *path, mode_t mode) {
 }
 
 int mkdir(const char *path, mode_t mode) {
-  return -1;
+  (void)mode;
+  if (!path)
+    return -1;
+  return (int)syscall(SYS_MKDIR, (long)path, 0, 0);
 }

@@ -20,6 +20,8 @@ enum Syscall {
 
   SYS_IOCTL = 16,
 
+  SYS_FCNTL = 72,
+
   SYS_GETCWD = 79,
   SYS_CHDIR = 80,
   SYS_MKDIR = 83,

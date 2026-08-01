@@ -3,7 +3,7 @@
 #include <unistd.h>
 
 DIR *opendir(const char *path) {
-  int fd = open(path);
+  int fd = open(path, 0);
 
   if (fd < 0)
     return 0;

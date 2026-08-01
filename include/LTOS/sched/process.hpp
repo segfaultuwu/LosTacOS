@@ -11,7 +11,7 @@ namespace sched {
 
 struct Task;
 
-enum FDType { FD_NONE, FD_FILE, FD_PIPE };
+enum FDType { FD_NONE, FD_FILE, FD_PIPE, FD_TTY };
 
 struct Pipe {
   char buffer[4096];
@@ -30,6 +30,8 @@ struct FdEntry {
   size_t offset = 0;
   bool readable = false;
   bool writable = false;
+  bool nonblock = false;
+  int flags = 0;
 };
 
 struct Process {

@@ -5,7 +5,7 @@ int main() {
   char *motd = "Hello, LosTacOS!";
   printf("%s\n", motd);
 
-  int fd = open("/proc/uptime");
+  int fd = open("/proc/uptime", 0);
   if (fd < 0) {
     printf("open(\"/proc/uptime\") failed\n");
   } else {
@@ -19,7 +19,7 @@ int main() {
     close(fd);
   }
 
-  int fd2 = open("/proc/version");
+  int fd2 = open("/proc/version", 0);
   if (fd2 < 0) {
     printf("open(\"/proc/version\") failed\n");
   } else {

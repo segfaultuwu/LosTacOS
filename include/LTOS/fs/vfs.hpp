@@ -104,6 +104,8 @@ char *get_content(Node *node);
 
 void change_dir(char *path);
 
+bool ensure_file_storage(Node *node);
+
 bool write_content(const char *path, const char *data, size_t len);
 bool append_content(const char *path, const char *data, size_t len);
 

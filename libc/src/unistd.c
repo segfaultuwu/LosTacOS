@@ -73,10 +73,6 @@ pid_t getpid(void) {
   return (pid_t)syscall(SYS_GETPID, 0, 0, 0);
 }
 
-int sched_yield(void) {
-  return (int)syscall(SYS_YIELD, 0, 0, 0);
-}
-
 int fork(void) {
   return (int)syscall(SYS_FORK, 0, 0, 0);
 }
@@ -110,13 +106,6 @@ int unlink(const char *path) {
 
 int remove(const char *path) {
   return unlink(path);
-}
-
-int mkdir(const char *path, mode_t mode) {
-  (void)mode;
-  if (!path)
-    return -1;
-  return (int)syscall(SYS_MKDIR, (long)path, 0, 0);
 }
 
 int rmdir(const char *path) {

@@ -14,6 +14,8 @@ namespace fs::vfs {
 Node *root = nullptr;
 Node *current_dir = nullptr;
 
+Node *get_process_cwd();
+
 void init() {
   root = (Node *)heap::kmalloc(sizeof(Node));
 
@@ -111,7 +113,9 @@ Node *create_file_path(const char *path) {
   if (!path || !root || path[0] == '\0')
     return nullptr;
 
-  Node *dir = root;
+  Node *dir = (path[0] == '/') ? root : get_process_cwd();
+  if (!dir)
+    dir = root;
 
   const char *p = path;
 
@@ -165,9 +169,18 @@ Node *create_file_path(const char *path) {
 }
 
 Node *create_dir_path(const char *path) {
-  Node *dir = root;
+  if (!path || !path[0])
+    return nullptr;
+
+  Node *dir = (path[0] == '/') ? root : get_process_cwd();
+  if (!dir)
+    dir = root;
 
   const char *p = path;
+
+  while (*p == '/')
+    p++;
+
   char part[128];
 
   while (*p) {
@@ -175,13 +188,19 @@ Node *create_dir_path(const char *path) {
     size_t i = 0;
 
     while (*p && *p != '/') {
-      part[i++] = *p++;
+      if (i < sizeof(part) - 1)
+        part[i++] = *p;
+
+      p++;
     }
 
     part[i] = 0;
 
-    if (*p)
+    while (*p == '/')
       p++;
+
+    if (i == 0)
+      continue;
 
     Node *next = find_in(dir, part);
 
@@ -441,7 +460,7 @@ char *get_path(Node *node) {
   return path;
 }
 
-static bool ensure_file_storage(Node *node) {
+bool ensure_file_storage(Node *node) {
   if (node->directory)
     return false;
 
@@ -450,8 +469,7 @@ static bool ensure_file_storage(Node *node) {
     if (!node->file)
       return false;
 
-    node->file->private_data = nullptr;
-    node->file->size = 0;
+    memset(node->file, 0, sizeof(File));
   }
 
   return true;

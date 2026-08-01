@@ -146,12 +146,16 @@ static uint64_t sys_write(uint64_t a, uint64_t b, uint64_t c) {
   if (!buf || len == 0)
     return 0;
 
-  if (fd == 1 || fd == 2)
+  FdEntry *entry = get_fd_entry(fd);
+
+  if ((fd == 1 || fd == 2) && (!entry || entry->type == sched::FD_NONE || entry->type == sched::FD_TTY))
     return tty::write(buf, len);
 
-  FdEntry *entry = get_fd_entry(fd);
-  if (!entry || entry->type == FD_NONE)
+  if (!entry || entry->type == sched::FD_NONE)
     return (uint64_t)-1;
+
+  if (entry->type == sched::FD_TTY)
+    return tty::write(buf, len);
 
   if (entry->type == FD_PIPE) {
     if (!entry->writable)
@@ -173,10 +177,36 @@ static uint64_t sys_write(uint64_t a, uint64_t b, uint64_t c) {
 
   fs::vfs::Node *node = entry->node;
 
-  if (node && node->dev && node->dev->write)
-    return node->dev->write(buf, len, entry->offset);
+  if (node) {
+    if (node->dev && node->dev->write)
+      return node->dev->write(buf, len, entry->offset);
 
-  framebuffer::swap();
+    if (!node->directory) {
+      if (!fs::vfs::ensure_file_storage(node))
+        return (uint64_t)-1;
+
+      size_t new_offset = entry->offset + len;
+      if (new_offset > node->file->size) {
+        char *new_data = (char *)heap::kmalloc(new_offset + 1);
+        if (!new_data)
+          return (uint64_t)-1;
+
+        if (node->file->private_data) {
+          memcpy(new_data, node->file->private_data, node->file->size);
+          heap::kfree(node->file->private_data);
+        }
+
+        node->file->private_data = new_data;
+        node->file->size = new_offset;
+      }
+
+      memcpy((char *)node->file->private_data + entry->offset, buf, len);
+      ((char *)node->file->private_data)[node->file->size] = '\0';
+      entry->offset = new_offset;
+
+      return len;
+    }
+  }
 
   return (uint64_t)-1;
 }
@@ -227,40 +257,49 @@ static uint64_t sys_read(uint64_t a, uint64_t b, uint64_t c) {
 
   fs::vfs::Node *node = entry->node;
 
-  if (node && node->dev && node->dev->read)
-    return node->dev->read(buf, len, entry->offset);
+  if (node) {
+    if (node->dev && node->dev->read)
+      return node->dev->read(buf, len, entry->offset);
 
-  if (node && !node->directory && node->file && node->file->read) {
-    node->file->offset = entry->offset;
+    if (!node->directory) {
+      if (node->file && node->file->read) {
+        node->file->offset = entry->offset;
 
-    int n = node->file->read(node->file, (uint8_t *)buf, len);
+        int n = node->file->read(node->file, (uint8_t *)buf, len);
 
-    entry->offset = node->file->offset;
+        entry->offset = node->file->offset;
 
-    return n;
-  }
+        return n;
+      }
 
-  if (node && !node->directory && node->file && node->file->private_data) {
-    size_t size = node->file->size;
+      if (!node->file || !node->file->private_data || node->file->size == 0) {
+        return 0;
+      }
 
-    if (entry->offset >= size)
-      return 0;
+      size_t size = node->file->size;
 
-    size_t remaining = size - entry->offset;
-    size_t n = len < remaining ? len : remaining;
+      if (entry->offset >= size)
+        return 0;
 
-    memcpy(buf, (const char *)node->file->private_data + entry->offset, n);
+      size_t remaining = size - entry->offset;
+      size_t n = len < remaining ? len : remaining;
 
-    entry->offset += n;
+      memcpy(buf, (const char *)node->file->private_data + entry->offset, n);
 
-    return n;
+      entry->offset += n;
+
+      return n;
+    }
   }
 
   return (uint64_t)-1;
 }
 
-static uint64_t sys_open(uint64_t a) {
+static uint64_t sys_open(uint64_t a, uint64_t b, uint64_t c) {
   const char *path = (const char *)a;
+  int flags = (int)b;
+  int mode = (int)c;
+  (void)mode;
   if (!path)
     return -1;
 
@@ -308,10 +347,19 @@ static uint64_t sys_open(uint64_t a) {
 
   fs::vfs::Node *node = fs::vfs::find(path);
 
+  if (!node && (flags & 0x40)) {
+    node = fs::vfs::create_file_path(path);
+  }
+
   if (!node)
     return -1;
 
-  return alloc_fd(node);
+  int fd = alloc_fd(node);
+  if (fd >= 0 && (flags & 0x200)) {
+    fs::vfs::write_content(path, "", 0);
+  }
+
+  return fd;
 }
 
 static uint64_t sys_close(uint64_t a) {
@@ -343,6 +391,57 @@ static uint64_t sys_close(uint64_t a) {
   memset(entry, 0, sizeof(FdEntry));
 
   return 0;
+}
+
+static uint64_t sys_fcntl(uint64_t a, uint64_t b, uint64_t c) {
+  int fd = (int)a;
+  int cmd = (int)b;
+  uint64_t arg = c;
+
+  FdEntry *entry = get_fd_entry(fd);
+  if (!entry || entry->type == FD_NONE)
+    return (uint64_t)-1;
+
+  switch (cmd) {
+  case 0: { // F_DUPFD
+    int min_fd = (int)arg;
+    if (min_fd < 0 || min_fd >= MAX_FDS)
+      return (uint64_t)-1;
+    for (int i = min_fd; i < MAX_FDS; i++) {
+      FdEntry *e = get_fd_entry(i);
+      if (e && e->type == FD_NONE) {
+        *e = *entry;
+        return i;
+      }
+    }
+    return (uint64_t)-1;
+  }
+  case 1: // F_GETFD
+    return entry->flags;
+  case 2: // F_SETFD
+    entry->flags = (int)arg;
+    return 0;
+  case 3: // F_GETFL
+    return entry->nonblock ? 0x800 : 0;
+  case 4: // F_SETFL
+    entry->nonblock = (arg & 0x800) != 0;
+    return 0;
+  case 1030: { // F_DUPFD_CLOEXEC
+    int min_fd = (int)arg;
+    if (min_fd < 0 || min_fd >= MAX_FDS)
+      return (uint64_t)-1;
+    for (int i = min_fd; i < MAX_FDS; i++) {
+      FdEntry *e = get_fd_entry(i);
+      if (e && e->type == FD_NONE) {
+        *e = *entry;
+        return i;
+      }
+    }
+    return (uint64_t)-1;
+  }
+  default:
+    return 0;
+  }
 }
 
 static void sys_close_all(sched::Process *proc) {
@@ -717,7 +816,7 @@ extern "C" uint64_t syscall_handler(uint64_t num, uint64_t a, uint64_t b, uint64
     return sys_read(a, b, c);
 
   case SYS_OPEN:
-    return sys_open(a);
+    return sys_open(a, b, c);
 
   case SYS_CLOSE:
     return sys_close(a);
@@ -855,6 +954,9 @@ extern "C" uint64_t syscall_handler(uint64_t num, uint64_t a, uint64_t b, uint64
     }
     return fs::vfs::create_dir_path(path) ? 0 : -1;
   }
+
+  case SYS_FCNTL:
+    return sys_fcntl(a, b, c);
 
   default:
     kprintf("syscall: unknown syscall %lu\n", num);

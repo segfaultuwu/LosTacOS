@@ -25,6 +25,7 @@
 #define SYS_RT_SIGPROCMASK 14
 
 #define SYS_IOCTL 16
+#define SYS_FCNTL 72
 
 #define SYS_GETTIMEOFDAY 96
 
