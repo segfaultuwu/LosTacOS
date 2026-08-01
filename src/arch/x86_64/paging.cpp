@@ -287,7 +287,8 @@ void clone_user_pages(uint64_t *dst_pml4, uint64_t *src_pml4) {
           if (!(flags & PAGE_USER))
             continue;
 
-          uint64_t va = ((uint64_t)pml4i << 39) | ((uint64_t)pi << 30) | ((uint64_t)di << 21) | ((uint64_t)ti << 12);
+          uint64_t va = ((uint64_t)pml4i << 39) | ((uint64_t)pi << 30) | ((uint64_t)di << 21) |
+                        ((uint64_t)ti << 12);
           uint64_t src_phys = src_pt[ti] & ~0xFFFULL;
 
           void *dst_page = alloc_page();

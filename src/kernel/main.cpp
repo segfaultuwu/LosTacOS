@@ -3,8 +3,10 @@
 #include "LTOS/arch/x86_64/idt.hpp"
 #include "LTOS/arch/x86_64/paging.hpp"
 
+#include "LTOS/drivers/ahci.hpp"
 #include "LTOS/drivers/console.hpp"
 #include "LTOS/drivers/framebuffer.hpp"
+#include "LTOS/drivers/pci.hpp"
 #include "LTOS/drivers/pic.hpp"
 #include "LTOS/drivers/psf.hpp"
 #include "LTOS/drivers/serial.hpp"
@@ -113,6 +115,9 @@ extern "C" void kernel_main(uint64_t magic, uint64_t mbi_addr) {
   //
 
   tty::init();
+
+  drivers::pci::init();
+  drivers::ahci::init();
 
   //
   // Scheduler

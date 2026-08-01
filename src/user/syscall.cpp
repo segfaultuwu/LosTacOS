@@ -148,7 +148,8 @@ static uint64_t sys_write(uint64_t a, uint64_t b, uint64_t c) {
 
   FdEntry *entry = get_fd_entry(fd);
 
-  if ((fd == 1 || fd == 2) && (!entry || entry->type == sched::FD_NONE || entry->type == sched::FD_TTY))
+  if ((fd == 1 || fd == 2) &&
+      (!entry || entry->type == sched::FD_NONE || entry->type == sched::FD_TTY))
     return tty::write(buf, len);
 
   if (!entry || entry->type == sched::FD_NONE)
@@ -306,7 +307,8 @@ static uint64_t sys_open(uint64_t a, uint64_t b, uint64_t c) {
   char abs_path[256];
   if (path[0] != '/') {
     sched::Task *task = sched::get_current();
-    const char *cwd = (task && task->process && task->process->cwd) ? fs::vfs::get_path(task->process->cwd) : "/";
+    const char *cwd =
+        (task && task->process && task->process->cwd) ? fs::vfs::get_path(task->process->cwd) : "/";
     size_t cwd_len = strlen(cwd);
     if (cwd_len > 0 && cwd[cwd_len - 1] == '/') {
       ksnprintf(abs_path, sizeof(abs_path), "%s%s", cwd, path);
@@ -460,7 +462,8 @@ static void sys_close_all(sched::Process *proc) {
               pipe_used[p] = false;
           }
         }
-      } else if (proc->fds[i].mount && proc->fds[i].fs_handle && proc->fds[i].mount->fs && proc->fds[i].mount->fs->close) {
+      } else if (proc->fds[i].mount && proc->fds[i].fs_handle && proc->fds[i].mount->fs &&
+                 proc->fds[i].mount->fs->close) {
         proc->fds[i].mount->fs->close(proc->fds[i].fs_handle);
       }
       memset(&proc->fds[i], 0, sizeof(FdEntry));
@@ -570,6 +573,33 @@ static uint64_t sys_wait(uint64_t a) {
 
     sched::yield();
   }
+}
+
+static uint64_t sys_kill(uint64_t a, uint64_t b) {
+  uint64_t pid = a;
+  int sig = (int)b;
+  (void)sig;
+
+  if (pid == 0 || pid == 1)
+    return -1;
+
+  sched::Task *cur = sched::get_current();
+  if (cur && cur->pid == pid) {
+    sched::exit(sig ? sig : 9);
+    return 0;
+  }
+
+  sched::Task *t = sched::head;
+  while (t) {
+    if (t->pid == pid) {
+      t->state = sched::State::DEAD;
+      sched::remove_and_destroy(t);
+      return 0;
+    }
+    t = t->next;
+  }
+
+  return -1;
 }
 
 static uint64_t sys_dup2(uint64_t a, uint64_t b) {
@@ -691,7 +721,8 @@ static uint64_t sys_readdir(uint64_t a, uint64_t b) {
             out->d_off = entry->offset + 1;
             out->d_reclen = sizeof(*out);
 
-            size_t copy_len = line_len < sizeof(out->d_name) - 1 ? line_len : sizeof(out->d_name) - 1;
+            size_t copy_len =
+                line_len < sizeof(out->d_name) - 1 ? line_len : sizeof(out->d_name) - 1;
             memcpy(out->d_name, line_start, copy_len);
             out->d_name[copy_len] = '\0';
 
@@ -699,7 +730,9 @@ static uint64_t sys_readdir(uint64_t a, uint64_t b) {
                 strcmp(out->d_name, "task") == 0 || strcmp(out->d_name, "cwd") == 0 ||
                 strcmp(out->d_name, "exe") == 0 || strcmp(out->d_name, "root") == 0) {
               out->d_type = (strcmp(out->d_name, "cwd") == 0 || strcmp(out->d_name, "exe") == 0 ||
-                             strcmp(out->d_name, "root") == 0) ? fs::vfs::DT_LNK : fs::vfs::DT_DIR;
+                             strcmp(out->d_name, "root") == 0)
+                                ? fs::vfs::DT_LNK
+                                : fs::vfs::DT_DIR;
             } else {
               out->d_type = fs::vfs::DT_REG;
             }
@@ -851,6 +884,9 @@ extern "C" uint64_t syscall_handler(uint64_t num, uint64_t a, uint64_t b, uint64
   case SYS_WAIT4:
     return sys_wait(a);
 
+  case SYS_KILL:
+    return sys_kill(a, b);
+
   case SYS_NANOSLEEP:
     return sys_sleep(a);
 
@@ -924,7 +960,9 @@ extern "C" uint64_t syscall_handler(uint64_t num, uint64_t a, uint64_t b, uint64
     char abs_path[256];
     if (path[0] != '/') {
       sched::Task *task = sched::get_current();
-      const char *cwd = (task && task->process && task->process->cwd) ? fs::vfs::get_path(task->process->cwd) : "/";
+      const char *cwd = (task && task->process && task->process->cwd)
+                            ? fs::vfs::get_path(task->process->cwd)
+                            : "/";
       size_t cwd_len = strlen(cwd);
       if (cwd_len > 0 && cwd[cwd_len - 1] == '/') {
         ksnprintf(abs_path, sizeof(abs_path), "%s%s", cwd, path);
@@ -943,7 +981,9 @@ extern "C" uint64_t syscall_handler(uint64_t num, uint64_t a, uint64_t b, uint64
     char abs_path[256];
     if (path[0] != '/') {
       sched::Task *task = sched::get_current();
-      const char *cwd = (task && task->process && task->process->cwd) ? fs::vfs::get_path(task->process->cwd) : "/";
+      const char *cwd = (task && task->process && task->process->cwd)
+                            ? fs::vfs::get_path(task->process->cwd)
+                            : "/";
       size_t cwd_len = strlen(cwd);
       if (cwd_len > 0 && cwd[cwd_len - 1] == '/') {
         ksnprintf(abs_path, sizeof(abs_path), "%s%s", cwd, path);

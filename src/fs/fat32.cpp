@@ -63,7 +63,8 @@ static uint32_t read_fat(Fat32Volume *vol, uint32_t cluster) {
 static void write_fat(Fat32Volume *vol, uint32_t cluster, uint32_t value) {
   uint32_t fat_offset = cluster * 4;
   for (int f = 0; f < vol->bpb.num_fats; f++) {
-    uint32_t fat_sector = vol->fat_start_sector + (f * vol->bpb.fat_size_32) + (fat_offset / vol->bpb.bytes_per_sector);
+    uint32_t fat_sector = vol->fat_start_sector + (f * vol->bpb.fat_size_32) +
+                          (fat_offset / vol->bpb.bytes_per_sector);
     uint32_t entry_offset = fat_offset % vol->bpb.bytes_per_sector;
 
     uint8_t *sec = get_sector_ptr(vol, fat_sector);
@@ -75,7 +76,8 @@ static void write_fat(Fat32Volume *vol, uint32_t cluster, uint32_t value) {
 }
 
 static uint32_t alloc_cluster(Fat32Volume *vol) {
-  uint32_t total_clusters = (vol->bpb.total_sectors_32 - vol->data_start_sector) / vol->bpb.sectors_per_cluster;
+  uint32_t total_clusters =
+      (vol->bpb.total_sectors_32 - vol->data_start_sector) / vol->bpb.sectors_per_cluster;
   for (uint32_t c = 2; c < total_clusters; c++) {
     if (read_fat(vol, c) == 0) {
       write_fat(vol, c, 0x0FFFFFFF);
@@ -319,16 +321,14 @@ static bool fat32_init(FileSystem *fs) {
   return true;
 }
 
-FileSystem filesystem = {
-    .name = "fat32",
-    .init = fat32_init,
-    .open = fat32_open,
-    .read = fat32_read,
-    .write = fat32_write,
-    .close = fat32_close,
-    .list = nullptr,
-    .ioctl = nullptr
-};
+FileSystem filesystem = {.name = "fat32",
+                         .init = fat32_init,
+                         .open = fat32_open,
+                         .read = fat32_read,
+                         .write = fat32_write,
+                         .close = fat32_close,
+                         .list = nullptr,
+                         .ioctl = nullptr};
 
 bool mount_ramdisk(void *addr, size_t size) {
   if (!addr || size < 512)
@@ -349,13 +349,15 @@ bool mount_ramdisk(void *addr, size_t size) {
 
   vol->bytes_per_cluster = vol->bpb.bytes_per_sector * vol->bpb.sectors_per_cluster;
   vol->fat_start_sector = vol->bpb.reserved_sector_count;
-  vol->data_start_sector = vol->bpb.reserved_sector_count + (vol->bpb.num_fats * vol->bpb.fat_size_32);
+  vol->data_start_sector =
+      vol->bpb.reserved_sector_count + (vol->bpb.num_fats * vol->bpb.fat_size_32);
   vol->root_cluster = vol->bpb.root_cluster;
 
   main_vol = vol;
 
-  drivers::serial::writef("FAT32: Mounted volume size=%zu bytes_per_sec=%u cluster_sec=%u root_cluster=%u\n",
-                          size, vol->bpb.bytes_per_sector, vol->bpb.sectors_per_cluster, vol->root_cluster);
+  drivers::serial::writef(
+      "FAT32: Mounted volume size=%zu bytes_per_sec=%u cluster_sec=%u root_cluster=%u\n", size,
+      vol->bpb.bytes_per_sector, vol->bpb.sectors_per_cluster, vol->root_cluster);
 
   return true;
 }

@@ -33,7 +33,9 @@ void init() {
   outb(COM1 + 4, 0x0B); // modem control
 }
 
-static bool can_write() { return inb(COM1 + 5) & 0x20; }
+static bool can_write() {
+  return inb(COM1 + 5) & 0x20;
+}
 
 void write(char c) {
   while (!can_write())

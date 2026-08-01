@@ -56,9 +56,8 @@ static bool load_psf1(void *data, size_t size, Font *font) {
 static bool load_psf2(void *data, size_t size, Font *font) {
   auto *hdr = (PSF2_Header *)data;
 
-  kprintf("PSF2 hdr=%d glyphs=%d glyph_size=%d width=%d height=%d\n",
-          hdr->headersize, hdr->glyph_count, hdr->glyph_size, hdr->width,
-          hdr->height);
+  kprintf("PSF2 hdr=%d glyphs=%d glyph_size=%d width=%d height=%d\n", hdr->headersize,
+          hdr->glyph_count, hdr->glyph_size, hdr->width, hdr->height);
 
   if (hdr->magic != PSF2_MAGIC)
     return false;
@@ -109,8 +108,8 @@ bool load(void *data, size_t size, Font *font) {
       return false;
   }
 
-  kprintf("FONT OK: %dx%d glyphs=%d size=%d\n", font->width, font->height,
-          font->glyph_count, font->glyph_size);
+  kprintf("FONT OK: %dx%d glyphs=%d size=%d\n", font->width, font->height, font->glyph_count,
+          font->glyph_size);
 
   return true;
 }
@@ -153,6 +152,8 @@ void find_font(uint64_t mbi) {
   });
 }
 
-Font *get() { return loaded ? &current_font : nullptr; }
+Font *get() {
+  return loaded ? &current_font : nullptr;
+}
 
 } // namespace psf

@@ -38,6 +38,12 @@ struct linux_dirent64 {
 #define STDOUT_FILENO 1
 #define STDERR_FILENO 2
 
+#ifndef SEEK_SET
+#define SEEK_SET 0
+#define SEEK_CUR 1
+#define SEEK_END 2
+#endif
+
 int isatty(int fd);
 
 int atexit(void (*func)(void));

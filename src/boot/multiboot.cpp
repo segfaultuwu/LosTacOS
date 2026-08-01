@@ -3,8 +3,8 @@
 #include "LTOS/drivers/serial.hpp"
 #include "LTOS/fs/tarfs.hpp"
 #include "LTOS/lib/kprintf.h"
-#include <stdint.h>
 #include <multiboot.h>
+#include <stdint.h>
 #include <string.h>
 
 namespace multiboot2 {

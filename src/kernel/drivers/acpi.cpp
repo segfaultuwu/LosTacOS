@@ -55,7 +55,8 @@ void init() {
     return;
   }
 
-  drivers::serial::writef("ACPI: RSDP found at %lx, RSDT at %x\n", (uint64_t)rsdp, rsdp->rsdt_address);
+  drivers::serial::writef("ACPI: RSDP found at %lx, RSDT at %x\n", (uint64_t)rsdp,
+                          rsdp->rsdt_address);
 
   const ACPISDTHeader *rsdt = (const ACPISDTHeader *)(uintptr_t)rsdp->rsdt_address;
   if (!rsdt || memcmp(rsdt->signature, "RSDT", 4) != 0) {

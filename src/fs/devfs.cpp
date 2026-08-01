@@ -2,6 +2,7 @@
 
 #include "LTOS/fs/vfs.hpp"
 #include "LTOS/lib/kprintf.h"
+#include "LTOS/logger.hpp"
 #include "LTOS/mm/heap.hpp"
 
 #include <string.h>
@@ -17,10 +18,17 @@ struct Device {
 
 static Device *devices = nullptr;
 
+static size_t kmsg_read(char *buf, size_t len, size_t offset) {
+  return logger::read_klog(buf, len, offset);
+}
+
+static vfs::DevOps kmsg_ops = {.write = nullptr, .read = kmsg_read, .ioctl = nullptr};
+
 bool init(FileSystem *fs) {
   (void)fs;
 
   kprintf("devfs initialized\n");
+  register_device("kmsg", &kmsg_ops);
 
   return true;
 }

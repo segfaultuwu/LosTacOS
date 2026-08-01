@@ -118,9 +118,11 @@ static const char *get_cpuinfo() {
         "cache_alignment\t: 64\n"
         "address sizes\t: 39 bits physical, 48 bits virtual\n\n",
         i, cpu.vendor[0] ? cpu.vendor : "Unknown", cpu.family, cpu.model,
-        cpu.brand[0] ? cpu.brand : "x86_64 Processor", cpu.stepping,
-        cpu.logical_cores, i, cpu.physical_cores, cpu.apic_id,
-        cpu.flags_str[0] ? cpu.flags_str : "fpu vme de pse tsc msr pae mce cx8 apic sse sse2 sse3 sse4_1 sse4_2 avx avx2");
+        cpu.brand[0] ? cpu.brand : "x86_64 Processor", cpu.stepping, cpu.logical_cores, i,
+        cpu.physical_cores, cpu.apic_id,
+        cpu.flags_str[0]
+            ? cpu.flags_str
+            : "fpu vme de pse tsc msr pae mce cx8 apic sse sse2 sse3 sse4_1 sse4_2 avx avx2");
   }
 
   return buffer;
@@ -145,12 +147,13 @@ static const char *get_stat() {
       blocked++;
   }
 
-  size_t offset = ksnprintf(buffer, sizeof(buffer), "cpu  %lu 0 %lu 0 0 0 0 0 0 0\n", ticks * 10, ticks);
+  size_t offset =
+      ksnprintf(buffer, sizeof(buffer), "cpu  %lu 0 %lu 0 0 0 0 0 0 0\n", ticks * 10, ticks);
 
   for (uint32_t i = 0; i < arch::cpu::g_smp_info.num_cpus; i++) {
-    offset += ksnprintf(buffer + offset, sizeof(buffer) - offset,
-                        "cpu%u %lu 0 %lu 0 0 0 0 0 0 0\n",
-                        i, (ticks * 10) / arch::cpu::g_smp_info.num_cpus, ticks / arch::cpu::g_smp_info.num_cpus);
+    offset += ksnprintf(buffer + offset, sizeof(buffer) - offset, "cpu%u %lu 0 %lu 0 0 0 0 0 0 0\n",
+                        i, (ticks * 10) / arch::cpu::g_smp_info.num_cpus,
+                        ticks / arch::cpu::g_smp_info.num_cpus);
   }
 
   offset += ksnprintf(buffer + offset, sizeof(buffer) - offset,
@@ -380,8 +383,10 @@ static void *open(void *, const char *path) {
       }
 
       if (strcmp(p, "/stat") == 0 || strcmp(p, "stat") == 0) {
-        char state_char = (t->state == sched::State::RUNNING || t->state == sched::State::READY) ? 'R'
-                        : (t->state == sched::State::BLOCKED) ? 'S' : 'Z';
+        char state_char = (t->state == sched::State::RUNNING || t->state == sched::State::READY)
+                              ? 'R'
+                          : (t->state == sched::State::BLOCKED) ? 'S'
+                                                                : 'Z';
         const char *proc_name = (t->process && t->process->name[0]) ? t->process->name : "task";
         uint64_t parent_pid = (t->parent) ? t->parent->pid : 0;
         uint64_t user_pages = count_user_pages(t->process ? t->process->space : nullptr);
@@ -389,7 +394,8 @@ static void *open(void *, const char *path) {
         uint64_t rss = user_pages;
 
         ksnprintf(buffer, sizeof(buffer),
-                  "%lu (%s) %c %lu %lu %lu 0 -1 0 0 0 0 0 %lu 0 0 0 20 0 1 0 0 %lu %lu 18446744073709551615 0 0 0 0 0 0 0 0 0 0 0 17 0 0\n",
+                  "%lu (%s) %c %lu %lu %lu 0 -1 0 0 0 0 0 %lu 0 0 0 20 0 1 0 0 %lu %lu "
+                  "18446744073709551615 0 0 0 0 0 0 0 0 0 0 0 17 0 0\n",
                   pid, proc_name, state_char, parent_pid, pid, pid, timer::ticks(), vsize, rss);
         return make_proc_file(buffer);
       }
@@ -565,9 +571,9 @@ static void *open(void *, const char *path) {
         int id = 1;
         for (fs::Mount *m = fs::get_mounts(); m; m = m->next) {
           const char *fs_name = (m->fs && m->fs->name) ? m->fs->name : "unknown";
-          offset += ksnprintf(buffer + offset, sizeof(buffer) - offset,
-                              "%d 1 0:0 / %s rw,relatime - %s %s rw\n",
-                              id++, m->path, fs_name, fs_name);
+          offset +=
+              ksnprintf(buffer + offset, sizeof(buffer) - offset,
+                        "%d 1 0:0 / %s rw,relatime - %s %s rw\n", id++, m->path, fs_name, fs_name);
         }
         return make_proc_file(buffer);
       }

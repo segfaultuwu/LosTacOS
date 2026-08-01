@@ -40,6 +40,7 @@ enum Syscall {
   SYS_EXECVE = 59,
   SYS_EXIT = 60,
   SYS_WAIT4 = 61,
+  SYS_KILL = 62,
 
   /*
    * Linux compatible additions

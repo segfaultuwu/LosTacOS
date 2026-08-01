@@ -1,4 +1,5 @@
 #include <signal.h>
+#include <sys/syscall.h>
 
 sighandler_t signal(int sig, sighandler_t handler) {
   (void)sig;
@@ -6,9 +7,7 @@ sighandler_t signal(int sig, sighandler_t handler) {
 }
 
 int kill(pid_t pid, int sig) {
-  (void)pid;
-  (void)sig;
-  return 0;
+  return (int)syscall(SYS_KILL, (long)pid, (long)sig);
 }
 
 int sigemptyset(sigset_t *set) {
