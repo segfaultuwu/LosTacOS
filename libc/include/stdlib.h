@@ -9,9 +9,10 @@
 
 extern void *malloc(size_t size);
 
-// extern void *calloc(size_t count, size_t size);
+extern void *calloc(size_t count, size_t size);
 
-// extern void *realloc(void *ptr, size_t size);
+extern void *realloc(void *ptr, size_t size);
+
 
 extern void free(void *ptr);
 
@@ -58,5 +59,8 @@ extern long labs(long value);
 extern char *getenv(const char *name);
 
 extern int setenv(const char *name, const char *value, int overwrite);
+
+extern char **environ;
+
 
 extern int unsetenv(const char *name);

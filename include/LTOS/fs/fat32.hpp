@@ -1,6 +1,7 @@
 #pragma once
 
 #include "LTOS/fs/vfs.hpp"
+#include <stddef.h>
 #include <stdint.h>
 
 namespace fs::fat32 {
@@ -58,8 +59,27 @@ constexpr uint8_t ATTR_DIRECTORY = 0x10;
 constexpr uint8_t ATTR_ARCHIVE = 0x20;
 constexpr uint8_t ATTR_LONG_NAME = 0x0F;
 
+// Pluggable I/O backend so the same FAT32 implementation can run over
+// an in-memory image (the original use case) or over a real block
+// device behind the AHCI driver. Each callback returns true on success.
+// `ctx` is whatever was passed in at mount time -- for the AHCI path it
+// is a small struct describing the AHCI port + partition offset.
+struct Backend {
+  bool (*read_sectors)(void *ctx, uint64_t start_lba, uint32_t count, void *buffer);
+  bool (*write_sectors)(void *ctx, uint64_t start_lba, uint32_t count, const void *buffer);
+  void *ctx;
+};
+
 extern FileSystem filesystem;
 
 bool mount_ramdisk(void *addr, size_t size);
+
+// Mount FAT32 sitting on top of an arbitrary block-device backend. The
+// backend takes over all I/O for the volume -- the rest of the driver
+// does not care whether the bytes come from RAM or a SATA disk.
+// Returns an opaque volume handle to pass to fs::mount() as the
+// per-mount data, so multiple FAT32 volumes can coexist (one per
+// mount point) instead of fighting over a single global.
+void *mount_backend(const Backend &backend);
 
 } // namespace fs::fat32

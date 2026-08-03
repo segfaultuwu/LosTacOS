@@ -561,11 +561,23 @@ static void process_scancode(uint8_t sc) {
       {.key = key, .pressed = true, .shift = shift, .ctrl = ctrl, .alt = alt, .scancode = sc});
 }
 
+void inject_scancode(uint8_t sc) {
+  process_scancode(sc);
+}
+
 void irq_handler() {
-  while (drivers::serial::inb(KBD_STATUS) & STATUS_OUTPUT_FULL) {
+  while (true) {
+    uint8_t status = drivers::serial::inb(KBD_STATUS);
+    if (!(status & STATUS_OUTPUT_FULL))
+      break;
+    if (status & 0x20) {
+      // Bit 5 set: data in 0x60 is a mouse byte -- leave it for mouse handler
+      break;
+    }
     uint8_t sc = drivers::serial::inb(KBD_DATA);
     process_scancode(sc);
   }
 }
+
 
 } // namespace drivers::keyboard

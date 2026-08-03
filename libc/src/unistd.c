@@ -45,6 +45,28 @@ int chdir(const char *path) {
   return syscall(SYS_CHDIR, (long)path, 0, 0);
 }
 
+int dup(int oldfd) {
+  return (int)syscall(SYS_DUP, oldfd);
+}
+
+int usleep(useconds_t usec) {
+  struct timespec ts;
+  ts.tv_sec = usec / 1000000;
+  ts.tv_nsec = (usec % 1000000) * 1000;
+  return (int)syscall(SYS_NANOSLEEP, (long)&ts, 0);
+}
+
+int link(const char *oldpath, const char *newpath) {
+  return (int)syscall(SYS_LINK, (long)oldpath, (long)newpath);
+}
+
+int symlink(const char *target, const char *linkpath) {
+  return (int)syscall(SYS_SYMLINK, (long)target, (long)linkpath);
+}
+
+
+
+
 int close(int fd) {
   return (int)syscall(SYS_CLOSE, fd);
 }

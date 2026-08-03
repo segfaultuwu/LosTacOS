@@ -181,10 +181,13 @@ void destroy_user_pages(uint64_t *pml4) {
           if (flags & PAGE_USER) {
             uint64_t phys = pte & ~0xFFFULL;
 
-            pmm::free_page(phys);
-
-            pt[ti] = 0;
+            if (!framebuffer::is_fb_phys_address(phys)) {
+              pmm::free_page(phys);
+              pt[ti] = 0;
+            }
           }
+
+
         }
       }
     }
@@ -267,6 +270,21 @@ bool map_page(uint64_t *pml4, uint64_t va, uint64_t pa, uint64_t flags) {
   return true;
 }
 
+bool map_range(uint64_t virt, uint64_t phys, uint64_t size, uint64_t flags) {
+  uint64_t start_virt = virt & ~0xFFFULL;
+  uint64_t start_phys = phys & ~0xFFFULL;
+
+  uint64_t end = (virt + size + 0xFFF) & ~0xFFFULL;
+
+  for (uint64_t offset = 0; start_virt + offset < end; offset += 0x1000) {
+    if (!map_page(kernel_pml4, start_virt + offset, start_phys + offset, flags)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 void unmap_page(uint64_t *pml4, uint64_t va) {
   uint64_t pml4_i = (va >> 39) & 0x1FF;
   uint64_t pdpt_i = (va >> 30) & 0x1FF;
@@ -317,9 +335,8 @@ void enable_paging() {
 
   logger::info("Mapping framebuffer");
 
-  for (uint64_t addr = fb_addr; addr < fb_addr + fb_size; addr += 0x1000) {
-
-    map_page(kernel_pml4, addr, addr, PAGE_PRESENT | PAGE_WRITABLE);
+  if (!map_range(fb_addr, fb_addr, fb_size, PAGE_PRESENT | PAGE_WRITABLE)) {
+    logger::error("Framebuffer mapping failed");
   }
 
   logger::info("Framebuffer mapped");
@@ -378,10 +395,11 @@ uint64_t *create_address_space() {
       pdpt[i] = kernel_pdpt[i];
   }
 
-  pml4[0] = (uint64_t)pdpt | PAGE_PRESENT | PAGE_WRITABLE;
+  pml4[0] = (uint64_t)pdpt | PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER;
 
   return pml4;
 }
+
 
 bool clone_user_pages(uint64_t *dst_pml4, uint64_t *src_pml4) {
   for (int pml4i = 0; pml4i < 256; pml4i++) {
@@ -424,7 +442,13 @@ bool clone_user_pages(uint64_t *dst_pml4, uint64_t *src_pml4) {
 
           uint64_t phys = pte & ~0xFFFULL;
 
+          if (framebuffer::is_fb_phys_address(phys)) {
+            map_page(dst_pml4, va, phys, flags);
+            continue;
+          }
+
           void *page = alloc_page();
+
 
           if (!page)
             return false;

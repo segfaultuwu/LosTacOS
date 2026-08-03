@@ -9,7 +9,7 @@ extern void *memcpy(void *dest, const void *src, size_t n);
 
 extern void *memset(void *dest, int value, size_t n);
 
-extern void *memmove(volatile void *dest, const volatile void *src, size_t n);
+extern void *memmove(void *dest, const void *src, size_t n);
 
 extern int memcmp(const void *ptr1, const void *ptr2, size_t n);
 
@@ -41,8 +41,11 @@ extern char *strrchr(const char *s, int c);
 
 extern char *strstr(const char *haystack, const char *needle);
 
-extern int strsplt(char *str, char *argv[], int max_args);
+extern char *strdup(const char *s);
+
+extern char *strtok(char *str, const char *delim);
 
 #ifdef __cplusplus
 }
 #endif
+

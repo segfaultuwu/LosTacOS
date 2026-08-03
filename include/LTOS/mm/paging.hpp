@@ -76,6 +76,7 @@ PageTable *clone_kernel_table();
 void switch_page_table(PageTable *table);
 
 bool map_page(uint64_t *pml4, uint64_t va, uint64_t pa, uint64_t flags);
+bool map_range(uint64_t virt, uint64_t phys, uint64_t size, uint64_t flags);
 
 void unmap_page(uint64_t *pml4, uint64_t va);
 

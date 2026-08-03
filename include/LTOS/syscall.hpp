@@ -7,68 +7,94 @@
  */
 
 enum Syscall {
-
   SYS_READ = 0,
   SYS_WRITE = 1,
   SYS_OPEN = 2,
   SYS_CLOSE = 3,
-
   SYS_STAT = 4,
   SYS_FSTAT = 5,
   SYS_LSTAT = 6,
   SYS_POLL = 7,
-
   SYS_LSEEK = 8,
-
   SYS_MMAP = 9,
+  SYS_MPROTECT = 10,
   SYS_MUNMAP = 11,
-
+  SYS_BRK = 12,
+  SYS_RT_SIGACTION = 13,
+  SYS_RT_SIGPROCMASK = 14,
   SYS_IOCTL = 16,
-
-  SYS_FCNTL = 72,
-
-  SYS_GETCWD = 79,
-  SYS_CHDIR = 80,
-  SYS_MKDIR = 83,
-  SYS_RMDIR = 84,
-  SYS_UNLINK = 87,
-  SYS_GETTIMEOFDAY = 96,
+  SYS_ACCESS = 21,
+  SYS_PIPE = 22,
+  SYS_SCHED_YIELD = 24,
 
   SYS_DUP = 32,
   SYS_DUP2 = 33,
-
+  SYS_PAUSE = 34,
   SYS_NANOSLEEP = 35,
-
+  SYS_GETITIMER = 36,
+  SYS_ALARM = 37,
+  SYS_SETITIMER = 38,
   SYS_GETPID = 39,
-
+  SYS_CLONE = 56,
   SYS_FORK = 57,
+  SYS_VFORK = 58,
   SYS_EXECVE = 59,
   SYS_EXIT = 60,
   SYS_WAIT4 = 61,
   SYS_KILL = 62,
+  SYS_UNAME = 63,
+  SYS_FCNTL = 72,
+  SYS_TRUNCATE = 76,
+  SYS_FTRUNCATE = 77,
+  SYS_GETDENTS = 78,
+  SYS_GETCWD = 79,
+  SYS_CHDIR = 80,
+  SYS_MKDIR = 83,
+  SYS_RMDIR = 84,
+  SYS_LINK = 86,
+  SYS_UNLINK = 87,
+  SYS_SYMLINK = 88,
+  SYS_READLINK = 89,
+  SYS_CHMOD = 90,
+  SYS_FCHMOD = 91,
+  SYS_CHOWN = 92,
+  SYS_FCHOWN = 93,
+  SYS_LCHOWN = 94,
+  SYS_UMASK = 95,
+  SYS_GETTIMEOFDAY = 96,
+  SYS_SYSINFO = 99,
+  SYS_GETUID = 102,
+  SYS_GETGID = 104,
+  SYS_SETUID = 105,
+  SYS_SETGID = 106,
+  SYS_GETEUID = 107,
+  SYS_GETEGID = 108,
+  SYS_GETPPID = 110,
+  SYS_MOUNT = 165,
+  SYS_UMOUNT2 = 166,
+  SYS_TIME = 201,
+  SYS_FUTEX = 202,
+  SYS_GETDENTS64 = 217,
+  SYS_SET_TID_ADDRESS = 218,
+  SYS_EXIT_GROUP = 231,
+  SYS_OPENAT = 257,
+  SYS_MKDIRAT = 258,
+  SYS_NEWFSTATAT = 262,
+  SYS_UNLINKAT = 263,
+  SYS_READLINKAT = 267,
+  SYS_PIPE2 = 293,
 
-  /*
-   * Linux compatible additions
-   */
-
-  SYS_PIPE = 293, // pipe2
-
-  /*
-   * LosTacOS extensions
-   * not used by Linux programs
-   */
-
+  /* LosTacOS custom extensions */
   SYS_SLEEP = 499,
-
   SYS_READDIR = 500,
   SYS_OPENDIR = 501,
   SYS_CLOSEDIR = 502,
-
   SYS_FSIZE = 503,
-
   SYS_YIELD = 504,
-
 };
+
+
 
 extern "C" uint64_t syscall_handler(uint64_t num, uint64_t a, uint64_t b, uint64_t c, uint64_t d,
                                     uint64_t e, uint64_t f);
+

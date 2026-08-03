@@ -17,5 +17,6 @@ bool queue_empty();
 KeyEvent pop();
 
 void irq_handler();
+void inject_scancode(uint8_t sc);
 
 } // namespace drivers::keyboard

@@ -6,6 +6,10 @@
 #define TCGETS 0x5401
 #define TCSETS 0x5402
 
+#define BLKGETSIZE64 0x80081272
+#define BLKGETSIZE 0x1260
+#define BLKSSZGET 0x1268
+
 struct winsize {
   uint16_t ws_row;
   uint16_t ws_col;

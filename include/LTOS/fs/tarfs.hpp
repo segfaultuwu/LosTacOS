@@ -1,9 +1,13 @@
 #pragma once
 
+#include "LTOS/fs/fs.hpp"
 #include <stddef.h>
 #include <stdint.h>
 
 namespace fs::tarfs {
+
+extern FileSystem filesystem;
+
 
 struct TarHeader {
   char name[100];

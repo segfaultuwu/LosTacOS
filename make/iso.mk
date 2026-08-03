@@ -1,5 +1,4 @@
-.PHONY: iso tarfs run
-
+.PHONY: iso tarfs run disk
 
 tarfs: rootfs
 
@@ -73,12 +72,24 @@ iso: $(KERNEL) tarfs
     fi \
 	fi
 
+DISK := $(BUILD)/disk0.img
+DISK_SIZE := 128M
 
 
-run: iso
+disk:
+	@if [ ! -f $(DISK) ]; then \
+		echo "Creating disk image $(DISK)"; \
+		qemu-img create -f raw $(DISK) $(DISK_SIZE); \
+	else \
+		echo "Disk already exists: $(DISK)"; \
+	fi
 
+run: iso disk
 	qemu-system-x86_64 \
 	-cdrom $(ISO) \
+	-drive id=disk0,file=$(DISK),format=raw,if=none \
+	-device ahci,id=ahci \
+	-device ide-hd,drive=disk0,bus=ahci.0 \
 	-serial stdio \
 	-no-reboot \
 	-no-shutdown

@@ -104,11 +104,7 @@ static void clear_line(int mode) {
     end = screen_width;
   }
 
-  for (uint32_t y = 0; y < font->height * scale; y++) {
-    for (uint32_t x = start; x < end; x++) {
-      framebuffer::put_pixel(x, cursor_y + y, bg);
-    }
-  }
+  framebuffer::fill_rect(start, cursor_y, end - start, font->height * scale, bg);
 
   mark_dirty(start, cursor_y, end - start, font->height * scale);
 }
@@ -124,8 +120,7 @@ static void draw_cursor_block(bool on) {
   for (uint32_t y = 0; y < h; y++) {
     for (uint32_t x = 0; x < w; x++) {
       uint32_t px = framebuffer::get_pixel(cursor_x + x, cursor_y + y);
-      uint32_t inverted = px ^ 0x00FFFFFF;
-      framebuffer::put_pixel(cursor_x + x, cursor_y + y, inverted);
+      framebuffer::put_pixel_unchecked(cursor_x + x, cursor_y + y, px ^ 0x00FFFFFF);
     }
   }
 
@@ -177,7 +172,7 @@ void draw_char(char c) {
           continue;
 
         uint32_t color = (bits & (0x80 >> bit)) ? fg_color : bg_color;
-        framebuffer::put_pixel(cursor_x + x, cursor_y + row, color);
+        framebuffer::put_pixel_unchecked(cursor_x + x, cursor_y + row, color);
       }
     }
   }

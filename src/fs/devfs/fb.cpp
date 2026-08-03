@@ -28,8 +28,6 @@ static size_t fb_write(const char *buf, size_t len, size_t offset) {
 
   memcpy(back + offset, buf, len);
 
-  framebuffer::swap();
-
   return len;
 }
 

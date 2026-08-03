@@ -1,7 +1,5 @@
 #include "LTOS/fs/procfs.hpp"
 #include "LTOS/arch/x86_64/cpu.hpp"
-#include "LTOS/boot.hpp"
-#include "LTOS/drivers/framebuffer.hpp"
 #include "LTOS/drivers/timer.hpp"
 #include "LTOS/fs/fs.hpp"
 #include "LTOS/fs/vfs.hpp"
@@ -63,20 +61,6 @@ static uint64_t count_user_pages(mm::AddressSpace *space) {
   }
 
   return pages;
-}
-
-static const char *get_bootloader() {
-  static char buffer[256];
-
-  if (boot_info.bootloader == Bootloader::Limine) {
-    ksnprintf(buffer, sizeof(buffer), "limine\n");
-  } else if (boot_info.bootloader == Bootloader::Grub) {
-    ksnprintf(buffer, sizeof(buffer), "grub\n");
-  } else {
-    ksnprintf(buffer, sizeof(buffer), "unknown\n");
-  }
-
-  return buffer;
 }
 
 static const char *get_version() {
@@ -250,43 +234,63 @@ static const char *get_loadavg() {
 
 static const char *get_diskstats() {
   uint64_t ticks = timer::ticks();
-  ksnprintf(buffer, sizeof(buffer), "   8       0 sda %lu %lu %lu %lu %lu %lu %lu %lu 0 %lu %lu\n",
-            ticks / 10, ticks / 20, ticks * 8, ticks, ticks / 30, ticks / 40, ticks * 2, ticks);
+  size_t offset = 0;
+  buffer[0] = 0;
+
+  vfs::Node *dev_dir = vfs::find("/dev");
+  if (dev_dir && dev_dir->children) {
+    int minor = 0;
+    for (vfs::Node *child = dev_dir->children; child; child = child->next) {
+      if (strncmp(child->name, "sd", 2) == 0 || strncmp(child->name, "hd", 2) == 0 ||
+          strncmp(child->name, "vd", 2) == 0 || strncmp(child->name, "nvme", 4) == 0) {
+        offset += ksnprintf(buffer + offset, sizeof(buffer) - offset,
+                            "   8       %d %s %lu %lu %lu %lu %lu %lu %lu %lu 0 %lu %lu\n",
+                            minor++, child->name, ticks / 10, ticks / 20, ticks * 8, ticks,
+                            ticks / 30, ticks / 40, ticks * 2, ticks);
+      }
+    }
+  }
+
   return buffer;
 }
-
-// static const char *get_net_dev() {
-//   uint64_t ticks = timer::ticks();
-//   ksnprintf(buffer, sizeof(buffer),
-//             "Inter-|   Receive                                                |  Transmit\n"
-//             " face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets
-//             " "errs drop fifo colls carrier compressed\n" "    lo: %7lu   %5lu    0    0    0
-//             0          0         0  %7lu   %5lu    0    0 " "  0     0       0          0\n" "
-//             eth0: %7lu   %5lu    0    0    0     0 0 0 %7lu %5lu    0    0  " "  0     0 0
-//             0\n", ticks * 128, ticks, ticks * 128, ticks, ticks * 1024, ticks * 8, ticks * 512,
-//             ticks * 4);
-//   return buffer;
-// }
 
 static const char *get_swaps() {
   return "Filename\t\t\t\tType\t\tSize\tUsed\tPriority\n";
 }
 
-static ProcEntry entries[] = {{"version", get_version},
-                              {"uptime", get_uptime},
-                              {"meminfo", get_meminfo},
-                              {"cpuinfo", get_cpuinfo},
-                              {"cmdline", get_cmdline},
-                              {"stat", get_stat},
-                              {"mounts", get_mounts},
-                              {"devices", get_devices},
-                              {"filesystems", get_filesystems},
-                              {"interrupts", get_interrupts},
-                              {"loadavg", get_loadavg},
-                              {"swaps", get_swaps},
-                              {"diskstats", get_diskstats},
-                              {"bootloader", get_bootloader},
-                              {nullptr, nullptr}};
+static const char *get_partitions() {
+  size_t offset = ksnprintf(buffer, sizeof(buffer), "major minor  #blocks  name\n\n");
+
+  vfs::Node *dev_dir = vfs::find("/dev");
+  if (dev_dir && dev_dir->children) {
+    int minor = 0;
+    for (vfs::Node *child = dev_dir->children; child; child = child->next) {
+      if (strncmp(child->name, "sd", 2) == 0 || strncmp(child->name, "hd", 2) == 0 ||
+          strncmp(child->name, "vd", 2) == 0 || strncmp(child->name, "nvme", 4) == 0) {
+
+        uint64_t blocks = 20971520;
+        size_t name_len = strlen(child->name);
+        if (name_len > 0 && (child->name[name_len - 1] >= '0' && child->name[name_len - 1] <= '9')) {
+          blocks = 2097152;
+        }
+
+        offset += ksnprintf(buffer + offset, sizeof(buffer) - offset, "   8        %d   %lu %s\n",
+                            minor++, blocks, child->name);
+      }
+    }
+  }
+
+  return buffer;
+}
+
+
+static ProcEntry entries[] = {
+    {"version", get_version},       {"uptime", get_uptime},   {"meminfo", get_meminfo},
+    {"cpuinfo", get_cpuinfo},       {"cmdline", get_cmdline}, {"stat", get_stat},
+    {"mounts", get_mounts},         {"devices", get_devices}, {"filesystems", get_filesystems},
+    {"interrupts", get_interrupts}, {"loadavg", get_loadavg}, {"swaps", get_swaps},
+    {"diskstats", get_diskstats},   {"partitions", get_partitions}, {nullptr, nullptr}};
+
 
 static ProcFile *make_proc_file(const char *content) {
   if (!content)

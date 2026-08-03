@@ -46,15 +46,20 @@ void set_gate(uint8_t vector, uint64_t handler, uint8_t dpl) {
   entry.zero = 0;
 }
 
+extern "C" void irq12_handler();
+
 void init() {
   IDTPointer idtr;
 
   for (int i = 0; i < 256; i++) {
     set_gate(i, (uint64_t)isr_stub_table[i], 0);
   }
+
   set_gate(0, (uint64_t)isr_stub_table[0]);
   set_gate(32, (uint64_t)irq0);
   set_gate(33, (uint64_t)irq1_handler);
+  set_gate(44, (uint64_t)irq12_handler); // IRQ 12 Mouse
+
   set_gate(128, (uint64_t)isr128, 3); // int 0x80 syscall gate, callable from ring 3
 
   idtr.limit = sizeof(idt) - 1;
@@ -64,6 +69,9 @@ void init() {
 
   drivers::pic::enable_irq(0);
   drivers::pic::enable_irq(1);
+  drivers::pic::enable_irq(2);  // PIC1->PIC2 cascade line
+  drivers::pic::enable_irq(12); // PS/2 Mouse on PIC2
+
 }
 
 } // namespace idt

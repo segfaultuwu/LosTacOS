@@ -15,6 +15,7 @@
 namespace sched {
 
 Task *head = nullptr;
+static Task *tail = nullptr;
 static Task *current_task = nullptr;
 
 static uint64_t pid_counter = 1;
@@ -164,9 +165,22 @@ Process *create_process(uint64_t entry) {
 
   proc->pid = pid_counter++;
 
+  proc->cwd = fs::vfs::find("/");
+
   proc->space = mm::AddressSpace::create();
 
+  if (!proc->space) {
+    heap::kfree(proc);
+    return nullptr;
+  }
+
   Task *task = create_task(proc, entry);
+
+  if (!task) {
+    proc->space->destroy();
+    heap::kfree(proc);
+    return nullptr;
+  }
 
   proc->main_thread = task;
 
@@ -182,6 +196,7 @@ void init() {
 
   kernel_process.pid = 0;
   kernel_process.space = mm::AddressSpace::kernel();
+  kernel_process.cwd = fs::vfs::find("/");
 
   kernel_task.pid = 0;
   kernel_task.process = &kernel_process;
@@ -383,8 +398,6 @@ Registers *schedule(Registers *old) {
 
   if (!head)
     return old;
-
-  reap();
 
   Task *next;
 
@@ -596,18 +609,12 @@ void add(Task *task) {
 
   if (!head) {
     head = task;
+    tail = task;
     return;
   }
 
-  Task *t = head;
-  while (t->next) {
-    if (t == task)
-      return;
-    t = t->next;
-  }
-
-  if (t != task)
-    t->next = task;
+  tail->next = task;
+  tail = task;
 }
 
 void destroy_task(Task *task) {
@@ -627,12 +634,17 @@ void remove_and_destroy(Task *task) {
 
   if (head == task) {
     head = task->next;
+    if (tail == task)
+      tail = head;
   } else {
     Task *t = head;
     while (t && t->next != task)
       t = t->next;
-    if (t)
+    if (t) {
       t->next = task->next;
+      if (tail == task)
+        tail = t;
+    }
   }
 
   if (task->process) {

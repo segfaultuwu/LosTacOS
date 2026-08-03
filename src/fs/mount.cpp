@@ -10,8 +10,14 @@ namespace fs {
 static Mount *mounts = nullptr;
 
 bool mount(const char *path, FileSystem *fs, void *data) {
+  if (!path || !path[0])
+    return false;
 
   vfs::Node *node = vfs::find(path);
+
+  if (!node) {
+    node = vfs::create_dir_path(path);
+  }
 
   if (!node) {
     kprintf("mount: %s missing\n", path);
@@ -23,19 +29,56 @@ bool mount(const char *path, FileSystem *fs, void *data) {
   node->mount_data = data;
 
   Mount *m = (Mount *)heap::kmalloc(sizeof(Mount));
+  if (!m)
+    return false;
 
-  m->path = path;
+  size_t path_len = strlen(path);
+  m->path = (char *)heap::kmalloc(path_len + 1);
+  if (m->path) {
+    strcpy(m->path, path);
+  }
+
   m->fs = fs;
   m->data = data;
 
   m->next = mounts;
   mounts = m;
 
-  if (fs->init)
+  if (fs && fs->init)
     return fs->init(fs);
 
   return true;
 }
+
+bool umount(const char *path) {
+  if (!path || !mounts)
+    return false;
+
+  Mount **pp = &mounts;
+  while (*pp) {
+    if ((*pp)->path && strcmp((*pp)->path, path) == 0) {
+      Mount *m = *pp;
+      *pp = m->next;
+
+      vfs::Node *node = vfs::find(path);
+      if (node && node->type == vfs::VFS_MOUNT) {
+        node->type = vfs::VFS_DIR;
+        node->filesystem = nullptr;
+        node->mount_data = nullptr;
+      }
+
+      if (m->path) {
+        heap::kfree(m->path);
+      }
+      heap::kfree(m);
+      return true;
+    }
+    pp = &(*pp)->next;
+  }
+
+  return false;
+}
+
 
 Mount *find_mount(const char *path) {
 

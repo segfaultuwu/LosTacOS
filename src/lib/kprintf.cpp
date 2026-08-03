@@ -37,9 +37,10 @@ static int sn_number_length(uint64_t value, int base) {
   return len;
 }
 
-static void sn_print_number(SnBuf &sb, uint64_t value, int base, int width = 0, bool zero = false) {
-  char buffer[32];
-  const char *digits = "0123456789abcdef";
+static void sn_print_number(SnBuf &sb, uint64_t value, int base, int width = 0, bool zero = false,
+                            bool uppercase = false) {
+  char buffer[64];
+  const char *digits = uppercase ? "0123456789ABCDEF" : "0123456789abcdef";
   int i = 0;
 
   if (value == 0) {
@@ -93,19 +94,19 @@ int kvsnprintf(char *buf, size_t size, const char *fmt, va_list args) {
 
     fmt++;
 
-    bool long_flag = false;
+    int long_flag = 0; // 0 = int, 1 = long / size_t, 2 = long long
     bool left = false;
     bool zero = false;
     int width = 0;
 
-    if (*fmt == '-') {
-      left = true;
-      fmt++;
-    }
-
-    if (*fmt == '0') {
-      zero = true;
-      fmt++;
+    while (*fmt == '-' || *fmt == '0') {
+      if (*fmt == '-') {
+        left = true;
+        fmt++;
+      } else if (*fmt == '0') {
+        zero = true;
+        fmt++;
+      }
     }
 
     while (*fmt >= '0' && *fmt <= '9') {
@@ -114,8 +115,21 @@ int kvsnprintf(char *buf, size_t size, const char *fmt, va_list args) {
     }
 
     if (*fmt == 'l') {
-      long_flag = true;
+      long_flag = 1;
       fmt++;
+      if (*fmt == 'l') {
+        long_flag = 2;
+        fmt++;
+      }
+    } else if (*fmt == 'z') {
+      long_flag = 1;
+      fmt++;
+    } else if (*fmt == 'h') {
+      long_flag = 0;
+      fmt++;
+      if (*fmt == 'h') {
+        fmt++;
+      }
     }
 
     switch (*fmt) {
@@ -124,10 +138,18 @@ int kvsnprintf(char *buf, size_t size, const char *fmt, va_list args) {
       sn_print_string(sb, str, width, left);
       break;
     }
-    case 'd': {
+    case 'c': {
+      int c = va_arg(args, int);
+      sn_putc(sb, (char)c);
+      break;
+    }
+    case 'd':
+    case 'i': {
       int64_t n;
-      if (long_flag)
+      if (long_flag == 2)
         n = va_arg(args, int64_t);
+      else if (long_flag == 1)
+        n = va_arg(args, long);
       else
         n = va_arg(args, int);
 
@@ -136,25 +158,54 @@ int kvsnprintf(char *buf, size_t size, const char *fmt, va_list args) {
         n = -n;
       }
 
-      sn_print_number(sb, n, 10, width, zero);
+      sn_print_number(sb, (uint64_t)n, 10, width, zero);
       break;
     }
     case 'u': {
-      uint64_t n = va_arg(args, uint64_t);
+      uint64_t n;
+      if (long_flag == 2)
+        n = va_arg(args, uint64_t);
+      else if (long_flag == 1)
+        n = va_arg(args, unsigned long);
+      else
+        n = va_arg(args, unsigned int);
+
       sn_print_number(sb, n, 10, width, zero);
       break;
     }
-    case 'x': {
-      uint64_t n = va_arg(args, uint64_t);
-      sn_print_number(sb, n, 16, width, zero);
+    case 'x':
+    case 'X': {
+      uint64_t n;
+      if (long_flag == 2)
+        n = va_arg(args, uint64_t);
+      else if (long_flag == 1)
+        n = va_arg(args, unsigned long);
+      else
+        n = va_arg(args, unsigned int);
+
+      sn_print_number(sb, n, 16, width, zero, (*fmt == 'X'));
+      break;
+    }
+    case 'o': {
+      uint64_t n;
+      if (long_flag == 2)
+        n = va_arg(args, uint64_t);
+      else if (long_flag == 1)
+        n = va_arg(args, unsigned long);
+      else
+        n = va_arg(args, unsigned int);
+
+      sn_print_number(sb, n, 8, width, zero);
       break;
     }
     case 'p': {
       uint64_t ptr = (uint64_t)va_arg(args, void *);
-
-      sn_puts(sb, "0x");
-      sn_print_number(sb, ptr, 16);
-
+      if (!ptr) {
+        sn_puts(sb, "(nil)");
+      } else {
+        sn_puts(sb, "0x");
+        sn_print_number(sb, ptr, 16, width, zero);
+      }
       break;
     }
     case '%':
@@ -206,10 +257,10 @@ int ksnprintf(char *buf, size_t size, const char *fmt, ...) {
   return ret;
 }
 
-static void print_number(uint64_t value, int base, int width = 0, bool zero = false) {
-  char buffer[32];
-
-  const char *digits = "0123456789abcdef";
+static void print_number(uint64_t value, int base, int width = 0, bool zero = false,
+                         bool uppercase = false) {
+  char buffer[64];
+  const char *digits = uppercase ? "0123456789ABCDEF" : "0123456789abcdef";
 
   int i = 0;
 
@@ -271,20 +322,20 @@ void kvprintf(const char *fmt, va_list args) {
 
     fmt++;
 
-    bool long_flag = false;
+    int long_flag = 0; // 0 = int, 1 = long / size_t, 2 = long long
     bool left = false;
     bool zero = false;
 
     int width = 0;
 
-    if (*fmt == '-') {
-      left = true;
-      fmt++;
-    }
-
-    if (*fmt == '0') {
-      zero = true;
-      fmt++;
+    while (*fmt == '-' || *fmt == '0') {
+      if (*fmt == '-') {
+        left = true;
+        fmt++;
+      } else if (*fmt == '0') {
+        zero = true;
+        fmt++;
+      }
     }
 
     while (*fmt >= '0' && *fmt <= '9') {
@@ -293,8 +344,21 @@ void kvprintf(const char *fmt, va_list args) {
     }
 
     if (*fmt == 'l') {
-      long_flag = true;
+      long_flag = 1;
       fmt++;
+      if (*fmt == 'l') {
+        long_flag = 2;
+        fmt++;
+      }
+    } else if (*fmt == 'z') {
+      long_flag = 1;
+      fmt++;
+    } else if (*fmt == 'h') {
+      long_flag = 0;
+      fmt++;
+      if (*fmt == 'h') {
+        fmt++;
+      }
     }
 
     switch (*fmt) {
@@ -305,11 +369,20 @@ void kvprintf(const char *fmt, va_list args) {
       break;
     }
 
-    case 'd': {
+    case 'c': {
+      int c = va_arg(args, int);
+      print_char((char)c);
+      break;
+    }
+
+    case 'd':
+    case 'i': {
       int64_t n;
 
-      if (long_flag)
+      if (long_flag == 2)
         n = va_arg(args, int64_t);
+      else if (long_flag == 1)
+        n = va_arg(args, long);
       else
         n = va_arg(args, int);
 
@@ -318,28 +391,58 @@ void kvprintf(const char *fmt, va_list args) {
         n = -n;
       }
 
-      print_number(n, 10, width, zero);
+      print_number((uint64_t)n, 10, width, zero);
       break;
     }
 
     case 'u': {
-      uint64_t n = va_arg(args, uint64_t);
+      uint64_t n;
+      if (long_flag == 2)
+        n = va_arg(args, uint64_t);
+      else if (long_flag == 1)
+        n = va_arg(args, unsigned long);
+      else
+        n = va_arg(args, unsigned int);
+
       print_number(n, 10, width, zero);
       break;
     }
 
     case 'p': {
       uint64_t ptr = (uint64_t)va_arg(args, void *);
-
-      print_string("0x");
-      print_number(ptr, 16);
-
+      if (!ptr) {
+        print_string("(nil)");
+      } else {
+        print_string("0x");
+        print_number(ptr, 16, width, zero);
+      }
       break;
     }
 
-    case 'x': {
-      uint64_t n = va_arg(args, uint64_t);
-      print_number(n, 16, width, zero);
+    case 'x':
+    case 'X': {
+      uint64_t n;
+      if (long_flag == 2)
+        n = va_arg(args, uint64_t);
+      else if (long_flag == 1)
+        n = va_arg(args, unsigned long);
+      else
+        n = va_arg(args, unsigned int);
+
+      print_number(n, 16, width, zero, (*fmt == 'X'));
+      break;
+    }
+
+    case 'o': {
+      uint64_t n;
+      if (long_flag == 2)
+        n = va_arg(args, uint64_t);
+      else if (long_flag == 1)
+        n = va_arg(args, unsigned long);
+      else
+        n = va_arg(args, unsigned int);
+
+      print_number(n, 8, width, zero);
       break;
     }
 
@@ -348,9 +451,11 @@ void kvprintf(const char *fmt, va_list args) {
       break;
     }
 
-    fmt++;
+    if (*fmt)
+      fmt++;
   }
 }
+
 
 void kprintf(const char *fmt, ...) {
   va_list args;
@@ -359,7 +464,6 @@ void kprintf(const char *fmt, ...) {
 
   kvprintf(fmt, args);
 
-  framebuffer::swap();
-
   va_end(args);
 }
+

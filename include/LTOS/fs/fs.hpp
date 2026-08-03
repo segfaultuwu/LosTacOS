@@ -7,7 +7,7 @@ namespace fs {
 struct FileSystem;
 
 struct Mount {
-  const char *path;
+  char *path;
   FileSystem *fs;
   void *data;
 
@@ -31,11 +31,18 @@ struct FileSystem {
   void (*list)(void *data);
 
   int (*ioctl)(void *file, unsigned long req, void *arg);
+
+  int (*lseek)(void *file, long offset, int whence);
 };
 
+
 bool mount(const char *path, FileSystem *fs, void *data);
+bool umount(const char *path);
 
 Mount *find_mount(const char *path);
 Mount *get_mounts();
+
+void register_filesystem(FileSystem *fs);
+FileSystem *get_filesystem(const char *name);
 
 } // namespace fs

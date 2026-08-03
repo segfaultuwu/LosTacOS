@@ -63,4 +63,9 @@ void sleep(uint64_t ms) {
   }
 }
 
+void delay_ms(uint64_t ms) {
+  for (volatile uint64_t i = 0; i < ms * 10000; i++)
+    asm volatile("pause");
+}
+
 } // namespace timer

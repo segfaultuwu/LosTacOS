@@ -16,15 +16,8 @@ struct timespec {
   long tv_nsec;
 };
 
-struct stat {
-  uint64_t st_dev;
-  uint64_t st_ino;
-  uint64_t st_mode;
-  uint64_t st_nlink;
-  uint64_t st_uid;
-  uint64_t st_gid;
-  uint64_t st_size;
-};
+#include <sys/stat.h>
+
 
 struct linux_dirent64 {
   uint64_t d_ino;
@@ -121,6 +114,15 @@ int dup(int oldfd);
 
 int dup2(int oldfd, int newfd);
 
+typedef unsigned int useconds_t;
+int usleep(useconds_t usec);
+
+int link(const char *oldpath, const char *newpath);
+int symlink(const char *target, const char *linkpath);
+
+
+
 int stat(const char *path, struct stat *buf);
 
 long syscall(long number, ...);
+

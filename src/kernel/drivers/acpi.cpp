@@ -8,19 +8,9 @@ namespace drivers::acpi {
 static uint32_t pm1a_cnt_port = 0x604;
 static bool acpi_initialized = false;
 
-static void outw(uint16_t port, uint16_t val) {
-  asm volatile("outw %0, %1" : : "a"(val), "Nd"(port));
-}
-
-static void outb(uint16_t port, uint8_t val) {
-  asm volatile("outb %0, %1" : : "a"(val), "Nd"(port));
-}
-
-static uint8_t inb(uint16_t port) {
-  uint8_t ret;
-  asm volatile("inb %1, %0" : "=a"(ret) : "Nd"(port));
-  return ret;
-}
+using drivers::serial::outb;
+using drivers::serial::inb;
+using drivers::serial::outw;
 
 static bool check_rsdp(const char *ptr) {
   if (memcmp(ptr, "RSD PTR ", 8) != 0)

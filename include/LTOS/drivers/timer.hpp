@@ -9,6 +9,7 @@ void init(uint32_t freq);
 uint64_t ticks();
 
 void sleep(uint64_t ms);
+void delay_ms(uint64_t ms);
 void tick();
 
 uint64_t get_uptime_sec();

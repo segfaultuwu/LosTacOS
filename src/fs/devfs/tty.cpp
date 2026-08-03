@@ -89,9 +89,14 @@ static size_t read_raw(char *buf, size_t len) {
   if (len == 0)
     return 0;
 
+  if (stdin_len == 0 && tio.c_cc[VMIN] == 0) {
+    return 0;
+  }
+
   while (stdin_len == 0) {
     asm volatile("sti; hlt");
   }
+
 
   size_t n = 0;
 

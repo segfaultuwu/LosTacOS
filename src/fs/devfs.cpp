@@ -1,9 +1,11 @@
 #include "LTOS/fs/devfs.hpp"
 
+#include "LTOS/drivers/mouse.hpp"
 #include "LTOS/fs/vfs.hpp"
 #include "LTOS/lib/kprintf.h"
 #include "LTOS/logger.hpp"
 #include "LTOS/mm/heap.hpp"
+
 
 #include <string.h>
 
@@ -38,15 +40,31 @@ void register_device(const char *name, vfs::DevOps *ops) {
   if (!dev)
     return;
 
-  dev->name = name;
+  // Was storing the caller's pointer directly. Fine for a string literal,
+  // but ahci.cpp (and potentially other callers) pass a stack-local
+  // buffer built with ksnprintf() -- once the enclosing function returns,
+  // dev->name (and the vfs node's name below, which shares the same
+  // pointer) is left dangling. Whether that manifests as "not found" or
+  // as a name that happens to still read back correctly depends entirely
+  // on whether something else has reused that stack memory yet, so this
+  // could look intermittent. A persistent copy removes the dependency on
+  // the caller's storage lifetime entirely.
+  char *name_copy = (char *)heap::kmalloc(strlen(name) + 1);
+  if (!name_copy) {
+    heap::kfree(dev);
+    return;
+  }
+  strcpy(name_copy, name);
+
+  dev->name = name_copy;
   dev->ops = ops;
   dev->next = devices;
   devices = dev;
 
-  vfs::Node *node = vfs::create_dev(name, ops);
+  vfs::Node *node = vfs::create_dev(name_copy, ops);
 
   if (!node)
-    kprintf("devfs: failed creating /dev/%s\n", name);
+    kprintf("devfs: failed creating /dev/%s\n", name_copy);
 }
 
 static Device *find_device(const char *name) {
@@ -108,8 +126,12 @@ struct DevHandle {
 static void *open(void *, const char *path) {
   Device *dev = find_device(path);
 
-  if (!dev)
+  if (!dev) {
+    kprintf("devfs: open '%s' failed, registered devices:\n", path);
+    for (Device *d = devices; d; d = d->next)
+      kprintf("devfs:   - '%s'\n", d->name);
     return nullptr;
+  }
 
   DevHandle *h = (DevHandle *)heap::kmalloc(sizeof(DevHandle));
 
@@ -173,6 +195,25 @@ static void list(void *) {
   }
 }
 
+static int devfs_lseek(void *file, long offset, int whence) {
+  DevHandle *h = (DevHandle *)file;
+  if (!h)
+    return -1;
+  long base = 0;
+  if (whence == 0)
+    base = 0;
+  else if (whence == 1)
+    base = (long)h->offset;
+  else if (whence == 2)
+    base = (long)h->offset;
+
+  long next = base + offset;
+  if (next < 0)
+    return -1;
+  h->offset = (size_t)next;
+  return (int)h->offset;
+}
+
 FileSystem filesystem = {
 
     .name = "devfs",
@@ -189,7 +230,9 @@ FileSystem filesystem = {
 
     .list = list,
 
-    .ioctl = ioctl
+    .ioctl = ioctl,
+
+    .lseek = devfs_lseek
 
 };
 

@@ -215,3 +215,31 @@ void *memchr(const void *s, int c, size_t n) {
   }
   return NULL;
 }
+
+#include <stdlib.h>
+
+char *strdup(const char *s) {
+  if (!s) return NULL;
+  size_t len = strlen(s);
+  char *dup = (char *)malloc(len + 1);
+  if (dup) {
+    memcpy(dup, s, len + 1);
+  }
+  return dup;
+}
+
+char *strtok(char *str, const char *delim) {
+  static char *save;
+  if (str) save = str;
+  if (!save || !*save) return NULL;
+  while (*save && strchr(delim, *save)) save++;
+  if (!*save) return NULL;
+  char *start = save;
+  while (*save && !strchr(delim, *save)) save++;
+  if (*save) {
+    *save = '\0';
+    save++;
+  }
+  return start;
+}
+

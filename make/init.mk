@@ -14,7 +14,8 @@ $(INIT_OBJ): $(INIT_SRC)
 
 
 
-$(INIT_BIN): $(INIT_OBJ)
+$(INIT_BIN): $(INIT_OBJ) libc
+
 
 	@mkdir -p $(dir $@)
 

@@ -245,4 +245,16 @@ size_t filesize(File *file) {
   return file->size;
 }
 
+FileSystem filesystem = {
+    .name = "tarfs",
+    .init = nullptr,
+    .open = nullptr,
+    .read = nullptr,
+    .write = nullptr,
+    .close = nullptr,
+    .list = nullptr,
+    .ioctl = nullptr,
+};
+
 } // namespace fs::tarfs
+

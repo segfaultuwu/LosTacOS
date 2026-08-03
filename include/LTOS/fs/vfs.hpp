@@ -46,6 +46,13 @@ struct Node {
   DevOps *dev;
 };
 
+struct VfsHandle {
+  Node *node;
+  Mount *mount;
+  void *fs_handle;
+  bool directory;
+};
+
 struct Dirent {
   uint64_t d_ino;
   uint64_t d_off;
@@ -68,6 +75,8 @@ enum DirType {
 extern Node *root;
 extern Node *current_dir;
 
+void register_filesystem(FileSystem *fs);
+
 void init();
 
 // Create nodes
@@ -88,18 +97,15 @@ void list_dir(Node *node);
 // Path handling
 char *get_path(Node *node);
 
-// Current path shit idk how to explain properly
+// Current path
 Node *get_current();
 void set_current(Node *node);
 
 Node *create_file(const char *name);
-
 Node *create_dir(const char *name);
-
 Node *create_symlink_path(const char *path, const char *target);
 
 char *get_name(Node *node);
-
 char *get_content(Node *node);
 
 void change_dir(char *path);
@@ -112,5 +118,10 @@ bool append_content(const char *path, const char *data, size_t len);
 size_t write(Node *node, const char *buf, size_t len);
 
 bool remove(const char *path);
+
+VfsHandle *open(const char *path);
+int read(VfsHandle *handle, char *buf, size_t size);
+int write(VfsHandle *handle, const char *buf, size_t size);
+void close(VfsHandle *handle);
 
 } // namespace fs::vfs

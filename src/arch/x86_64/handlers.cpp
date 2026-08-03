@@ -4,12 +4,17 @@
 #include "LTOS/drivers/pic.hpp"
 #include "LTOS/drivers/serial.hpp"
 #include "LTOS/drivers/timer.hpp"
+#include "LTOS/drivers/usb.hpp"
 #include "LTOS/logger.hpp"
 #include "LTOS/sched/scheduler.hpp"
 
 extern "C" sched::Registers *timer_irq(sched::Registers *regs) {
   timer::tick();
   console::cursor_tick();
+
+  uint8_t sc;
+  if (drivers::usb::keyboard_poll(&sc) > 0)
+    drivers::keyboard::inject_scancode(sc);
 
   drivers::pic::eoi(0);
 
@@ -23,3 +28,5 @@ extern "C" sched::Registers *keyboard_irq(sched::Registers *regs) {
 
   return regs;
 }
+
+

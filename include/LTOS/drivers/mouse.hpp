@@ -18,7 +18,9 @@ void init();
 void register_dev();
 void irq_handler();
 MouseState get_state();
+bool has_data();
 
 } // namespace drivers::mouse
+
 
 extern "C" sched::Registers *mouse_irq(sched::Registers *regs);

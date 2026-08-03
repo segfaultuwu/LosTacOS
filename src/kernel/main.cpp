@@ -2,20 +2,26 @@
 #include "LTOS/arch/x86_64/gdt.hpp"
 #include "LTOS/arch/x86_64/idt.hpp"
 #include "LTOS/boot.hpp"
+#include "LTOS/fs/fat32.hpp"
 #include "LTOS/mm/paging.hpp"
 
 #include "LTOS/drivers/ahci.hpp"
 #include "LTOS/drivers/console.hpp"
 #include "LTOS/drivers/framebuffer.hpp"
+#include "LTOS/drivers/mouse.hpp"
 #include "LTOS/drivers/pci.hpp"
+
 #include "LTOS/drivers/pic.hpp"
 #include "LTOS/drivers/psf.hpp"
 #include "LTOS/drivers/serial.hpp"
 #include "LTOS/drivers/timer.hpp"
 #include "LTOS/drivers/tty.hpp"
+#include "LTOS/drivers/uhci.hpp"
+#include "LTOS/drivers/usb.hpp"
 
 #include "LTOS/fs/devfs.hpp"
 #include "LTOS/fs/fs.hpp"
+#include "LTOS/fs/isofs.hpp"
 #include "LTOS/fs/procfs.hpp"
 #include "LTOS/fs/sysfs.hpp"
 #include "LTOS/fs/tarfs.hpp"
@@ -25,6 +31,7 @@
 #include "LTOS/mm/pmm.hpp"
 #include "LTOS/mm/vmm.hpp"
 
+#include "LTOS/logger.hpp"
 #include "LTOS/sched/scheduler.hpp"
 #include "LTOS/state.hpp"
 
@@ -74,6 +81,9 @@ extern "C" void kernel_main(uint64_t magic, uint64_t info) {
     drivers::serial::writef("Bootloader: UNKNOWN (%s)\n", name);
   }
 
+  strncpy(boot_info.bootloader_name, multiboot2::get_bootloader_name(info),
+          sizeof(boot_info.bootloader_name));
+
   //
   // Boot info
   //
@@ -119,7 +129,7 @@ extern "C" void kernel_main(uint64_t magic, uint64_t info) {
   //
   // Graphics
   //
-
+  framebuffer::init(boot_info.addr);
   framebuffer::init_backbuffer();
   console::init();
 
@@ -133,7 +143,16 @@ extern "C" void kernel_main(uint64_t magic, uint64_t info) {
 
   fs::vfs::create_dir_path("/proc");
   fs::vfs::create_dir_path("/dev");
+  fs::vfs::create_dir_path("/sys");
 
+  fs::register_filesystem(&fs::tarfs::filesystem);
+  fs::register_filesystem(&fs::procfs::filesystem);
+  fs::register_filesystem(&fs::devfs::filesystem);
+  fs::register_filesystem(&fs::sysfs::filesystem);
+  fs::register_filesystem(&fs::fat32::filesystem);
+  fs::register_filesystem(&fs::isofs::filesystem);
+
+  fs::mount("/", &fs::tarfs::filesystem, nullptr);
   fs::mount("/proc", &fs::procfs::filesystem, nullptr);
   fs::mount("/dev", &fs::devfs::filesystem, nullptr);
   fs::mount("/sys", &fs::sysfs::filesystem, nullptr);
@@ -146,9 +165,28 @@ extern "C" void kernel_main(uint64_t magic, uint64_t info) {
   //
 
   tty::init();
+  drivers::mouse::init();
+  drivers::mouse::register_dev();
 
   drivers::pci::init();
   drivers::ahci::init();
+
+  drivers::uhci::init();
+  drivers::usb::init();
+
+  for (int port = 0; port < 32; port++) {
+    if (drivers::ahci::atapi::is_atapi_device(port)) {
+      void *boot_vol = fs::isofs::mount(port);
+      if (boot_vol) {
+        fs::vfs::create_dir_path("/boot");
+        if (fs::mount("/boot", &fs::isofs::filesystem, boot_vol))
+          logger::info("Mounted boot ISO at /boot (ATAPI port %d)", port);
+        else
+          logger::warn("Failed to mount boot ISO at /boot");
+      }
+      break;
+    }
+  }
 
   //
   // Scheduler

@@ -7,7 +7,10 @@ struct env_entry {
   const char *value;
 };
 
+char **environ = NULL;
+
 static struct env_entry env[MAX_ENV];
+
 
 static int env_count = 0;
 

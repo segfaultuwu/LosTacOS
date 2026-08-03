@@ -49,8 +49,8 @@ Node *create_node(const char *name, bool directory, Node *parent) {
   node->file = nullptr;
   node->dev = nullptr;
 
-  node->filesystem = nullptr;
-  node->mount_data = nullptr;
+  node->filesystem = parent ? parent->filesystem : nullptr;
+  node->mount_data = parent ? parent->mount_data : nullptr;
 
   node->next = parent->children;
   parent->children = node;
@@ -58,10 +58,17 @@ Node *create_node(const char *name, bool directory, Node *parent) {
   return node;
 }
 
-void mount_node(Node *node, fs::FileSystem *fs, void *data) {
-  node->type = VFS_MOUNT;
+static void propagate_fs(Node *node, fs::FileSystem *fs, void *data) {
   node->filesystem = fs;
   node->mount_data = data;
+
+  for (Node *child = node->children; child; child = child->next)
+    propagate_fs(child, fs, data);
+}
+
+void mount_node(Node *node, fs::FileSystem *fs, void *data) {
+  node->type = VFS_MOUNT;
+  propagate_fs(node, fs, data);
 }
 
 Node *create_dev(const char *name, DevOps *dev) {
@@ -228,6 +235,15 @@ void list_dir(Node *n) {
   if (!n)
     n = current_dir;
 
+  // A VFS_MOUNT node is a directory backed by an actual filesystem
+  // (FAT32, etc) whose contents are not represented in the in-memory
+  // child list. Delegate to the underlying fs's list() callback so the
+  // kernel `ls` command sees the real entries instead of an empty dir.
+  if (n->type == VFS_MOUNT && n->filesystem && n->filesystem->list) {
+    n->filesystem->list(n->mount_data);
+    return;
+  }
+
   Node *node = n->children;
 
   while (node) {
@@ -317,14 +333,40 @@ Node *find(const char *path) {
 
       } else {
 
-        node = find_in(node, part);
+        Node *next = find_in(node, part);
 
-        if (!node)
+        if (!next) {
+          if (node->type == VFS_MOUNT && node->filesystem && node->filesystem->open) {
+            char relpath[256];
+            size_t ri = 0;
+
+            for (size_t x = 0; x < i; x++)
+              relpath[ri++] = part[x];
+
+            size_t pk = p + 1;
+            while (path[pk]) {
+              if (path[pk] == '/') {
+                relpath[ri++] = '/';
+                pk++;
+              } else {
+                if (ri > 0 && relpath[ri - 1] != '/')
+                  relpath[ri++] = '/';
+                while (path[pk] && path[pk] != '/')
+                  relpath[ri++] = path[pk++];
+              }
+            }
+            relpath[ri] = 0;
+
+            void *handle = node->filesystem->open(node->mount_data, relpath);
+            if (handle) {
+              node->filesystem->close(handle);
+              return node;
+            }
+          }
           return nullptr;
-
-        if (node->type == VFS_MOUNT) {
-          return node;
         }
+
+        node = next;
 
         // resolve symlinks
         int depth = 0;
@@ -597,8 +639,15 @@ int read(Node *node, char *buf, int size) {
   if (!node)
     return -1;
 
-  if (node->type == VFS_MOUNT) {
-    return -1;
+  if (node->type == VFS_MOUNT && node->filesystem && node->filesystem->open &&
+      node->filesystem->read) {
+    void *handle = node->filesystem->open(node->mount_data, "");
+    if (!handle)
+      return -1;
+
+    int ret = node->filesystem->read(handle, buf, size);
+    node->filesystem->close(handle);
+    return ret;
   }
 
   if (node->type == VFS_DEV && node->dev && node->dev->read)
@@ -627,6 +676,109 @@ int write(Node *node, const char *buf, int size) {
     return write_content(node->name, buf, size) ? size : -1;
 
   return -1;
+}
+
+VfsHandle *open(const char *path) {
+  if (!path || !path[0])
+    return nullptr;
+
+  char resolved[256];
+  if (path[0] != '/') {
+    Node *cwd = get_process_cwd();
+    const char *cwd_path = get_path(cwd);
+    size_t cwd_len = strlen(cwd_path);
+    if (cwd_len > 0 && cwd_path[cwd_len - 1] == '/')
+      ksnprintf(resolved, sizeof(resolved), "%s%s", cwd_path, path);
+    else
+      ksnprintf(resolved, sizeof(resolved), "%s/%s", cwd_path, path);
+  } else {
+    strncpy(resolved, path, sizeof(resolved) - 1);
+    resolved[sizeof(resolved) - 1] = 0;
+  }
+
+  Mount *mnt = find_mount(resolved);
+  if (mnt && mnt->fs && mnt->fs->open) {
+    const char *sub = resolved + strlen(mnt->path);
+    while (*sub == '/')
+      sub++;
+
+    if (*sub) {
+      void *handle = mnt->fs->open(mnt->data, sub);
+      if (handle) {
+        VfsHandle *h = (VfsHandle *)heap::kmalloc(sizeof(VfsHandle));
+        if (!h) {
+          if (mnt->fs->close)
+            mnt->fs->close(handle);
+          return nullptr;
+        }
+        h->node = nullptr;
+        h->mount = mnt;
+        h->fs_handle = handle;
+        h->directory = false;
+        return h;
+      }
+      return nullptr;
+    }
+  }
+
+  Node *node = find(resolved);
+  if (!node)
+    return nullptr;
+
+  VfsHandle *h = (VfsHandle *)heap::kmalloc(sizeof(VfsHandle));
+  if (!h)
+    return nullptr;
+
+  h->node = node;
+  h->mount = nullptr;
+  h->fs_handle = nullptr;
+  h->directory = node->directory;
+  return h;
+}
+
+int read(VfsHandle *handle, char *buf, size_t size) {
+  if (!handle || !buf)
+    return -1;
+
+  if (handle->mount && handle->mount->fs && handle->mount->fs->read)
+    return handle->mount->fs->read(handle->fs_handle, buf, size);
+
+  if (handle->node) {
+    if (handle->node->type == VFS_DEV && handle->node->dev && handle->node->dev->read)
+      return handle->node->dev->read(buf, size, 0);
+
+    if (!handle->node->directory && handle->node->file && handle->node->file->private_data) {
+      size_t len = handle->node->file->size < size ? handle->node->file->size : size;
+      for (size_t i = 0; i < len; i++)
+        buf[i] = ((char *)handle->node->file->private_data)[i];
+      return len;
+    }
+  }
+
+  return -1;
+}
+
+int write(VfsHandle *handle, const char *buf, size_t size) {
+  if (!handle || !buf)
+    return -1;
+
+  if (handle->mount && handle->mount->fs && handle->mount->fs->write)
+    return handle->mount->fs->write(handle->fs_handle, buf, size);
+
+  if (handle->node && handle->node->dev && handle->node->dev->write)
+    return handle->node->dev->write(buf, size, 0);
+
+  return -1;
+}
+
+void close(VfsHandle *handle) {
+  if (!handle)
+    return;
+
+  if (handle->mount && handle->mount->fs && handle->mount->fs->close)
+    handle->mount->fs->close(handle->fs_handle);
+
+  heap::kfree(handle);
 }
 
 } // namespace fs::vfs

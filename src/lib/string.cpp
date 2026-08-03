@@ -16,6 +16,20 @@ void *memcpy(void *dest, const void *src, size_t n) {
   uint64_t *d64 = (uint64_t *)d;
   const uint64_t *s64 = (const uint64_t *)s;
 
+  while (n >= 64) {
+    d64[0] = s64[0];
+    d64[1] = s64[1];
+    d64[2] = s64[2];
+    d64[3] = s64[3];
+    d64[4] = s64[4];
+    d64[5] = s64[5];
+    d64[6] = s64[6];
+    d64[7] = s64[7];
+    d64 += 8;
+    s64 += 8;
+    n -= 64;
+  }
+
   while (n >= 8) {
     *d64++ = *s64++;
     n -= 8;
@@ -24,76 +38,145 @@ void *memcpy(void *dest, const void *src, size_t n) {
   d = (uint8_t *)d64;
   s = (const uint8_t *)s64;
 
-  while (n) {
-    *d++ = *s++;
-    n--;
-  }
+  while (n)
+    *d++ = *s++, n--;
 
   return dest;
 }
 
 char *strdup(const char *s) {
-  size_t len = 0;
-
-  while (s[len])
-    len++;
-
+  size_t len = strlen(s);
   char *out = (char *)heap::kmalloc(len + 1);
-
   if (!out)
     return nullptr;
 
-  for (size_t i = 0; i < len; i++)
-    out[i] = s[i];
-
+  memcpy(out, s, len);
   out[len] = 0;
 
   return out;
 }
 
 void *memset(void *dest, int value, size_t count) {
-  unsigned char *ptr = (unsigned char *)dest;
+  uint8_t *d = (uint8_t *)dest;
+  uint8_t v = (uint8_t)value;
 
-  while (count--)
-    *ptr++ = (unsigned char)value;
+  while (count && ((uintptr_t)d & 7)) {
+    *d++ = v;
+    count--;
+  }
+
+  uint64_t v64 =
+      ((uint64_t)v << 56) | ((uint64_t)v << 48) | ((uint64_t)v << 40) | ((uint64_t)v << 32) |
+      ((uint64_t)v << 24) | ((uint64_t)v << 16) | ((uint64_t)v << 8) | v;
+
+  uint64_t *d64 = (uint64_t *)d;
+
+  while (count >= 64) {
+    d64[0] = v64;
+    d64[1] = v64;
+    d64[2] = v64;
+    d64[3] = v64;
+    d64[4] = v64;
+    d64[5] = v64;
+    d64[6] = v64;
+    d64[7] = v64;
+    d64 += 8;
+    count -= 64;
+  }
+
+  while (count >= 8) {
+    *d64++ = v64;
+    count -= 8;
+  }
+
+  d = (uint8_t *)d64;
+  while (count)
+    *d++ = v, count--;
 
   return dest;
 }
 
-void *memmove(volatile void *dest, const volatile void *src, size_t n) {
-  volatile unsigned char *d = (unsigned char *)dest;
-  const volatile unsigned char *s = (unsigned char *)src;
+void *memmove(void *dest, const void *src, size_t n) {
+  unsigned char *d = (unsigned char *)dest;
+  const unsigned char *s = (unsigned char *)src;
 
   if (d < s) {
-    for (size_t i = 0; i < n; i++)
-      d[i] = s[i];
-  } else {
-    for (size_t i = n; i > 0; i--)
-      d[i - 1] = s[i - 1];
+    memcpy(dest, src, n);
+  } else if (d > s) {
+    while (n) {
+      n--;
+      d[n] = s[n];
+    }
   }
 
-  return (void *)dest;
+  return dest;
 }
 
 int memcmp(const void *ptr1, const void *ptr2, size_t n) {
-  const unsigned char *a = (unsigned char *)ptr1;
-  const unsigned char *b = (unsigned char *)ptr2;
+  const uint8_t *a = (const uint8_t *)ptr1;
+  const uint8_t *b = (const uint8_t *)ptr2;
 
-  for (size_t i = 0; i < n; i++) {
-    if (a[i] != b[i])
-      return a[i] - b[i];
+  while (n && ((uintptr_t)a & 7)) {
+    if (*a != *b)
+      return (int)*a - (int)*b;
+    a++;
+    b++;
+    n--;
+  }
+
+  const uint64_t *a64 = (const uint64_t *)a;
+  const uint64_t *b64 = (const uint64_t *)b;
+
+  while (n >= 8) {
+    if (*a64 != *b64) {
+      a = (const uint8_t *)a64;
+      b = (const uint8_t *)b64;
+      for (size_t i = 0; i < 8; i++) {
+        if (a[i] != b[i])
+          return (int)a[i] - (int)b[i];
+      }
+    }
+    a64++;
+    b64++;
+    n -= 8;
+  }
+
+  a = (const uint8_t *)a64;
+  b = (const uint8_t *)b64;
+
+  while (n) {
+    if (*a != *b)
+      return (int)*a - (int)*b;
+    a++;
+    b++;
+    n--;
   }
 
   return 0;
 }
 
+static inline uint64_t has_zero(uint64_t v) {
+  return (v - 0x0101010101010101ULL) & ~v & 0x8080808080808080ULL;
+}
+
 size_t strlen(const char *str) {
-  size_t len = 0;
+  const char *s = str;
 
-  while (str[len])
-    len++;
+  while ((uintptr_t)s & 7) {
+    if (!*s)
+      return (size_t)(s - str);
+    s++;
+  }
 
-  return len;
+  const uint64_t *w = (const uint64_t *)s;
+  while (!has_zero(*w))
+    w++;
+
+  s = (const char *)w;
+  while (*s)
+    s++;
+
+  return (size_t)(s - str);
 }
 
 size_t strnlen(const char *str, size_t max) {

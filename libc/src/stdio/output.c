@@ -1,5 +1,7 @@
+#include <math.h>
 #include <stdarg.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <sys/syscall.h>
 #include <unistd.h>
@@ -78,19 +80,109 @@ static void buf_puts(char *buf, size_t size, size_t *pos, const char *s) {
     buf_putc(buf, size, pos, *s++);
 }
 
-static void buf_put_padded_num(char *buf, size_t size, size_t *pos, unsigned long x, int is_negative, int width, int zero_pad, int left, int is_hex) {
+static void buf_put_float(char *buf, size_t size, size_t *pos, double value, int precision,
+                          int width, int zero_pad, int left) {
+  if (precision < 0)
+    precision = 6;
+
+  if (value != value) {
+    buf_puts(buf, size, pos, "nan");
+    return;
+  }
+
+  if (value > 1.0e308) {
+    buf_puts(buf, size, pos, "inf");
+    return;
+  }
+
+  int negative = 0;
+
+  if (value < 0) {
+    negative = 1;
+    value = -value;
+  }
+
+  unsigned long long integer = (unsigned long long)value;
+
+  double frac = value - (double)integer;
+
+  char tmp[128];
+  size_t p = 0;
+
+  if (integer == 0) {
+    tmp[p++] = '0';
+  } else {
+    char rev[64];
+    int r = 0;
+
+    while (integer) {
+      rev[r++] = '0' + (integer % 10);
+
+      integer /= 10;
+    }
+
+    while (r--)
+      tmp[p++] = rev[r];
+  }
+
+  if (precision > 0) {
+    tmp[p++] = '.';
+
+    for (int i = 0; i < precision; i++) {
+      frac *= 10.0;
+
+      int digit = (int)frac;
+
+      tmp[p++] = '0' + digit;
+
+      frac -= digit;
+    }
+  }
+
+  int len = p + negative;
+
+  int pad = 0;
+
+  if (width > len)
+    pad = width - len;
+
+  if (!left) {
+    char c = zero_pad ? '0' : ' ';
+
+    while (pad--)
+      buf_putc(buf, size, pos, c);
+  }
+
+  if (negative)
+    buf_putc(buf, size, pos, '-');
+
+  for (size_t i = 0; i < p; i++)
+    buf_putc(buf, size, pos, tmp[i]);
+
+  if (left) {
+    while (pad--)
+      buf_putc(buf, size, pos, ' ');
+  }
+}
+
+static void buf_put_padded_num(char *buf, size_t size, size_t *pos, unsigned long long x,
+                               int is_negative, int width, int zero_pad, int left, int mode,
+                               int uppercase) {
   char tmp[64];
   int i = 0;
-  const char *hex_chars = "0123456789abcdef";
+  const char *hex_chars = uppercase ? "0123456789ABCDEF" : "0123456789abcdef";
 
   if (x == 0) {
     tmp[i++] = '0';
   } else {
     while (x) {
-      if (is_hex) {
+      if (mode == 1) { // Hex
         tmp[i++] = hex_chars[x & 0xf];
         x >>= 4;
-      } else {
+      } else if (mode == 2) { // Octal
+        tmp[i++] = '0' + (x & 7);
+        x >>= 3;
+      } else { // Decimal
         tmp[i++] = '0' + (x % 10);
         x /= 10;
       }
@@ -146,12 +238,14 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list args) {
     int left = 0;
     int zero_pad = 0;
 
-    if (*fmt == '-') {
-      left = 1;
-      fmt++;
-    } else if (*fmt == '0') {
-      zero_pad = 1;
-      fmt++;
+    while (*fmt == '-' || *fmt == '0') {
+      if (*fmt == '-') {
+        left = 1;
+        fmt++;
+      } else if (*fmt == '0') {
+        zero_pad = 1;
+        fmt++;
+      }
     }
 
     int width = 0;
@@ -184,13 +278,23 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list args) {
       }
     }
 
-    int long_flag = 0;
+    int long_flag = 0; // 0 = int, 1 = long / size_t, 2 = long long
     if (*fmt == 'l') {
       long_flag = 1;
       fmt++;
+      if (*fmt == 'l') {
+        long_flag = 2;
+        fmt++;
+      }
     } else if (*fmt == 'z') {
       long_flag = 1;
       fmt++;
+    } else if (*fmt == 'h') {
+      long_flag = 0;
+      fmt++;
+      if (*fmt == 'h') {
+        fmt++;
+      }
     }
 
     switch (*fmt) {
@@ -228,35 +332,84 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list args) {
 
     case 'd':
     case 'i': {
-      long x = long_flag ? va_arg(args, long) : va_arg(args, int);
+      long long x;
+      if (long_flag == 2)
+        x = va_arg(args, long long);
+      else if (long_flag == 1)
+        x = va_arg(args, long);
+      else
+        x = va_arg(args, int);
+
       int is_neg = 0;
-      unsigned long uval;
+      unsigned long long uval;
       if (x < 0) {
         is_neg = 1;
-        uval = (unsigned long)(-x);
+        uval = (unsigned long long)(-x);
       } else {
-        uval = (unsigned long)x;
+        uval = (unsigned long long)x;
       }
-      buf_put_padded_num(buf, size, &pos, uval, is_neg, width, zero_pad, left, 0);
+      buf_put_padded_num(buf, size, &pos, uval, is_neg, width, zero_pad, left, 0, 0);
+      break;
+    }
+
+    case 'f':
+    case 'F': {
+      double d = va_arg(args, double);
+
+      buf_put_float(buf, size, &pos, d, precision, width, zero_pad, left);
+
       break;
     }
 
     case 'u': {
-      unsigned long x = long_flag ? va_arg(args, unsigned long) : va_arg(args, unsigned int);
-      buf_put_padded_num(buf, size, &pos, x, 0, width, zero_pad, left, 0);
+      unsigned long long x;
+      if (long_flag == 2)
+        x = va_arg(args, unsigned long long);
+      else if (long_flag == 1)
+        x = va_arg(args, unsigned long);
+      else
+        x = va_arg(args, unsigned int);
+
+      buf_put_padded_num(buf, size, &pos, x, 0, width, zero_pad, left, 0, 0);
       break;
     }
 
-    case 'x': {
-      unsigned long x = long_flag ? va_arg(args, unsigned long) : va_arg(args, unsigned int);
-      buf_put_padded_num(buf, size, &pos, x, 0, width, zero_pad, left, 1);
+    case 'x':
+    case 'X': {
+      unsigned long long x;
+      if (long_flag == 2)
+        x = va_arg(args, unsigned long long);
+      else if (long_flag == 1)
+        x = va_arg(args, unsigned long);
+      else
+        x = va_arg(args, unsigned int);
+
+      buf_put_padded_num(buf, size, &pos, x, 0, width, zero_pad, left, 1, (*fmt == 'X'));
+      break;
+    }
+
+    case 'o': {
+      unsigned long long x;
+      if (long_flag == 2)
+        x = va_arg(args, unsigned long long);
+      else if (long_flag == 1)
+        x = va_arg(args, unsigned long);
+      else
+        x = va_arg(args, unsigned int);
+
+      buf_put_padded_num(buf, size, &pos, x, 0, width, zero_pad, left, 2, 0);
       break;
     }
 
     case 'p': {
       void *ptr = va_arg(args, void *);
-      buf_puts(buf, size, &pos, "0x");
-      buf_put_padded_num(buf, size, &pos, (unsigned long)ptr, 0, width, zero_pad, left, 1);
+      if (!ptr) {
+        buf_puts(buf, size, &pos, "(nil)");
+      } else {
+        buf_puts(buf, size, &pos, "0x");
+        buf_put_padded_num(buf, size, &pos, (unsigned long long)(uintptr_t)ptr, 0, width, zero_pad,
+                           left, 1, 0);
+      }
       break;
     }
 

@@ -98,3 +98,26 @@ irq1_handler:
     add rsp,16
 
     iretq
+
+
+global irq12_handler
+extern mouse_irq
+
+irq12_handler:
+
+    push 0
+    push 44
+
+    PUSH_REGS
+
+    mov rdi,rsp
+    call mouse_irq
+
+    mov rsp,rax
+
+    POP_REGS
+
+    add rsp,16
+
+    iretq
+
